@@ -26,6 +26,8 @@ jobs:
           node --check scripts/upload.mjs
       - name: Load the scoring engine
         run: node --input-type=module -e "await import('./engine.js')"
+      - name: Test scoring engine
+        run: npm run test:engine
       - name: Check page scripts syntax
         run: |
           for f in assets/*.js scripts/serve.mjs tests/fixtures/anonymize.mjs; do node --check "$f"; done
