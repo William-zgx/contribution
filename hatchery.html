@@ -336,13 +336,19 @@
   const newEggs = eggs.filter(isNewThisWeek);
   $('#lede').innerHTML = `${TOTAL} 位贡献者里 <span class="n">${hatched.length}</span> 人已孵化（${passed.length} 人通过考核，${magicHatched.length} 人靠魔力）。`
     + `<span class="n">${eggs.length}</span> 人还在考核期，其中 <span class="n">${G.due.length}</span> 人两项都还差且 ${DUE} 天内到期${newEggs.length ? `，${newEggs.length} 人本周刚来` : ''}；另有 ${failed.length} 人考核期满未孵化。`;
-  const minD = Math.min(...eggs.map((p) => p.newbie.daysLeft));
-  const soon = eggs.filter((p) => p.newbie.daysLeft === minD).sort((a, b) => a.login.localeCompare(b.login));
-  $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('hourglass', 13)}最先到期</div>`
-    + `<div class="soon-m"><span class="av-stack">${soon.slice(0, 4).map((p) => `<span data-person="${esc(p.login)}" tabindex="0" role="button" aria-label="${esc(p.login)}，查看档案">${K.avatar(p.login, 28)}</span>`).join('')}</span>`
-    + `<span><b class="num">${soon.length}</b> 人剩 <b class="num">${minD}</b> 天</span></div>`
-    + `<div class="soon-s">${soon.slice(0, 3).map((p) => K.pname(p.login, { avatar: false })).join('、')}${soon.length > 3 ? ` 等 ${soon.length} 人` : ''}<br>${fmt.md(soon[0].newbie.end)}考核截止</div>`
-    + `<button type="button" class="link" id="soonGo">看 ${DUE} 天内到期的 ${G.due.length} 人${icon('arrow-right', 14)}</button></div>`;
+  if (eggs.length) {
+    const minD = Math.min(...eggs.map((p) => p.newbie.daysLeft));
+    const soon = eggs.filter((p) => p.newbie.daysLeft === minD).sort((a, b) => a.login.localeCompare(b.login));
+    $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('hourglass', 13)}最先到期</div>`
+      + `<div class="soon-m"><span class="av-stack">${soon.slice(0, 4).map((p) => `<span data-person="${esc(p.login)}" tabindex="0" role="button" aria-label="${esc(p.login)}，查看档案">${K.avatar(p.login, 28)}</span>`).join('')}</span>`
+      + `<span><b class="num">${soon.length}</b> 人剩 <b class="num">${minD}</b> 天</span></div>`
+      + `<div class="soon-s">${soon.slice(0, 3).map((p) => K.pname(p.login, { avatar: false })).join('、')}${soon.length > 3 ? ` 等 ${soon.length} 人` : ''}<br>${fmt.md(soon[0].newbie.end)}考核截止</div>`
+      + `<button type="button" class="link" id="soonGo">看 ${DUE} 天内到期的 ${G.due.length} 人${icon('arrow-right', 14)}</button></div>`;
+  } else {
+    $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('egg', 13)}考核中</div>`
+      + '<div class="soon-m">当前没有考核中的蛙卵</div>'
+      + '<div class="soon-s">有新的贡献者参与后，这里会显示最先到期的考核。</div></div>';
+  }
   $('#fxFoot').innerHTML = `<span>新手考核：首次贡献起 <b>${NB.days}</b> 天内合入 ≥<b>${NB.merged}</b> 且活跃周 ≥<b>${NB.activeWeeks}</b></span><span>或魔力 ≥<b>${R.hatchBonus}</b> 直接孵化</span><span id="fxRate"></span>`;
 
   // ───────── 孵化漏斗（桑基；手机端重排为三段条） ─────────
@@ -882,7 +888,7 @@
   drawFunnel();
   document.addEventListener('nwk:theme', () => { drawFunnel(); drawCohort(); });
   if (location.hash === '#failed') setFold(true);
-  $('#soonGo').addEventListener('click', () => goNode('due'));
+  $('#soonGo')?.addEventListener('click', () => goNode('due'));
 })();
 </script>
 </body>

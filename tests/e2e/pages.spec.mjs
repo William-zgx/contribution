@@ -82,6 +82,31 @@ test.describe('档案', () => {
 });
 
 test.describe('孵化台', () => {
+  test('没有考核中的蛙卵时显示空状态，历史贡献与交互仍可用 @mobile', async ({ page }) => {
+    const board = structuredClone(BOARD);
+    board.people = board.people.filter((p) => p.newbie.status !== 'pending' || p.level !== null);
+    Object.assign(board.summary, {
+      contributors: board.people.length,
+      memberContributors: board.people.filter((p) => p.member).length,
+      outsiders: board.people.filter((p) => !p.member).length,
+      pending: 0,
+    });
+    await page.route('**/data/board.json', (route) => route.fulfill({ json: board }));
+
+    await open(page, '/hatchery.html');
+    await expect(page.locator('.boot-error')).toHaveCount(0);
+    await expect(page.locator('#headline')).toContainText('0 人在孵化');
+    await expect(page.locator('#heroSide')).toContainText('当前没有考核中的蛙卵');
+    await expect(page.locator('#soonGo')).toHaveCount(0);
+    await expect(page.locator('#board .lane-empty')).toHaveCount(3);
+    await expect(page.locator('#rules h4')).toHaveCount(3);
+    await expect(page.locator('#lede')).toContainText(`${board.people.length} 位贡献者`);
+    const failed = board.people.filter((p) => p.newbie.status === 'failed' && p.level === null).length;
+    await page.keyboard.press('u');
+    await expect(page.locator('#foldBtn')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#foldIn .rows .lrow')).toHaveCount(failed);
+  });
+
   test('蛙卵逐个列出，三组人数之和等于考核中人数', async ({ page }) => {
     const pending = P.filter((p) => p.newbie.status === 'pending' && p.level === null).length;
     await open(page, '/hatchery.html');
