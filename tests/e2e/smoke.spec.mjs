@@ -1,4 +1,4 @@
-// 六个页面都能启动：无报错、导航正确、主题参数生效、只请求本站资源。
+// 六个页面都能启动：无报错、导航正确、启动无布局偏移、主题参数生效、只请求本站资源、启动脚本与数据并行下载。
 import { test, expect, open, PAGES, NAV } from './fixtures.mjs';
 
 for (const pg of PAGES) {
@@ -18,12 +18,49 @@ for (const pg of PAGES) {
   });
 }
 
+// 启动期间顶栏占住高度、正文隐藏到页面脚本填好再显示，所以首屏没有布局偏移（CLS 按 web-vitals 口径应低于 0.1）
+for (const pg of PAGES) {
+  test(`${pg.label}页启动时没有布局偏移 @mobile`, async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    await open(page, `/${pg.file}`);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    expect(await page.evaluate(() => window.__cls)).toBeLessThan(0.1);
+  });
+}
+
+test('页面滚动后顶栏显示底部分隔线', async ({ page }) => {
+  await open(page, '/index.html');
+  const bar = page.locator('#appbar');
+  const color = () => bar.evaluate((el) => getComputedStyle(el).borderBottomColor);
+  await expect.poll(color).toBe('rgba(0, 0, 0, 0)');
+  await page.evaluate(() => scrollTo(0, 400));
+  await expect(bar).toHaveClass(/is-scrolled/);
+  await expect.poll(color).not.toBe('rgba(0, 0, 0, 0)');
+});
+
 test('?theme=dark 切到暗色，导航时保留', async ({ page }) => {
   await open(page, '/index.html?theme=dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.locator('#appbar .nav a[data-screen="c2"]').click();
   await expect(page).toHaveURL(/ranking\.html\?theme=dark/);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('derive.js 与 kit.js 和 data/board.json 并行下载，且各只请求一次', async ({ page }) => {
+  await open(page, '/index.html');
+  const res = await page.evaluate(() => performance.getEntriesByType('resource')
+    .map((e) => ({ path: new URL(e.name).pathname, start: e.startTime, end: e.responseEnd })));
+  const board = res.find((r) => r.path === '/data/board.json');
+  for (const path of ['/assets/derive.js', '/assets/kit.js']) {
+    const hits = res.filter((r) => r.path === path);
+    expect(hits, `${path} 只应请求一次（preload 被 load() 复用）`).toHaveLength(1);
+    expect(hits[0].start, `${path} 不应等 board.json 返回才开始下载`).toBeLessThan(board.end);
+  }
 });
 
 test('数据读取失败时给出提示与重新加载按钮', async ({ page, errors }) => {

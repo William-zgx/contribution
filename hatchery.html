@@ -219,6 +219,8 @@
   @media (prefers-reduced-motion: reduce) {
     .fx-in .fx-link, .fx-in .fx-node .bx { animation: none; }
   }
+  /* 屏外蛋卡跳过布局与绘制。contain-intrinsic-size 指内容盒，实测 212–249px（桌面中位 228、手机 212），取 220px */
+  .lane-g > .card.egg { content-visibility: auto; contain-intrinsic-size: auto 220px; }
 </style>
 </head>
 <body>
@@ -336,13 +338,19 @@
   const newEggs = eggs.filter(isNewThisWeek);
   $('#lede').innerHTML = `${TOTAL} 位贡献者里 <span class="n">${hatched.length}</span> 人已孵化（${passed.length} 人通过考核，${magicHatched.length} 人靠魔力）。`
     + `<span class="n">${eggs.length}</span> 人还在考核期，其中 <span class="n">${G.due.length}</span> 人两项都还差且 ${DUE} 天内到期${newEggs.length ? `，${newEggs.length} 人本周刚来` : ''}；另有 ${failed.length} 人考核期满未孵化。`;
-  const minD = Math.min(...eggs.map((p) => p.newbie.daysLeft));
-  const soon = eggs.filter((p) => p.newbie.daysLeft === minD).sort((a, b) => a.login.localeCompare(b.login));
-  $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('hourglass', 13)}最先到期</div>`
-    + `<div class="soon-m"><span class="av-stack">${soon.slice(0, 4).map((p) => `<span data-person="${esc(p.login)}" tabindex="0" role="button" aria-label="${esc(p.login)}，查看档案">${K.avatar(p.login, 28)}</span>`).join('')}</span>`
-    + `<span><b class="num">${soon.length}</b> 人剩 <b class="num">${minD}</b> 天</span></div>`
-    + `<div class="soon-s">${soon.slice(0, 3).map((p) => K.pname(p.login, { avatar: false })).join('、')}${soon.length > 3 ? ` 等 ${soon.length} 人` : ''}<br>${fmt.md(soon[0].newbie.end)}考核截止</div>`
-    + `<button type="button" class="link" id="soonGo">看 ${DUE} 天内到期的 ${G.due.length} 人${icon('arrow-right', 14)}</button></div>`;
+  if (eggs.length) {
+    const minD = Math.min(...eggs.map((p) => p.newbie.daysLeft));
+    const soon = eggs.filter((p) => p.newbie.daysLeft === minD).sort((a, b) => a.login.localeCompare(b.login));
+    $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('hourglass', 13)}最先到期</div>`
+      + `<div class="soon-m"><span class="av-stack">${soon.slice(0, 4).map((p) => `<span data-person="${esc(p.login)}" tabindex="0" role="button" aria-label="${esc(p.login)}，查看档案">${K.avatar(p.login, 28)}</span>`).join('')}</span>`
+      + `<span><b class="num">${soon.length}</b> 人剩 <b class="num">${minD}</b> 天</span></div>`
+      + `<div class="soon-s">${soon.slice(0, 3).map((p) => K.pname(p.login, { avatar: false })).join('、')}${soon.length > 3 ? ` 等 ${soon.length} 人` : ''}<br>${fmt.md(soon[0].newbie.end)}考核截止</div>`
+      + `<button type="button" class="link" id="soonGo">看 ${DUE} 天内到期的 ${G.due.length} 人${icon('arrow-right', 14)}</button></div>`;
+  } else {
+    $('#heroSide').innerHTML = `<div class="panel soon"><div class="label">${icon('egg', 13)}考核中</div>`
+      + '<div class="soon-m">当前没有考核中的蛙卵</div>'
+      + '<div class="soon-s">有新的贡献者参与后，这里会显示最先到期的考核。</div></div>';
+  }
   $('#fxFoot').innerHTML = `<span>新手考核：首次贡献起 <b>${NB.days}</b> 天内合入 ≥<b>${NB.merged}</b> 且活跃周 ≥<b>${NB.activeWeeks}</b></span><span>或魔力 ≥<b>${R.hatchBonus}</b> 直接孵化</span><span id="fxRate"></span>`;
 
   // ───────── 孵化漏斗（桑基；手机端重排为三段条） ─────────
@@ -379,6 +387,10 @@
   let fxDrawn = false;
   function drawFunnel() {
     const host = $('#funnel');
+    if (!TOTAL) {
+      host.innerHTML = K.empty({ art: 'egg', title: '暂无贡献记录', body: '有贡献者后，这里会显示孵化进度。' });
+      return;
+    }
     const Wd = host.clientWidth;
     if (!Wd) return;
     if (Wd < 600) { drawFunnelMobile(host); return; }
@@ -676,7 +688,7 @@
   ];
   const coLegend = () => { $('#coLegend').innerHTML = SER.map((s) => `<span class="key" style="--k:${s.color}">${s.label}</span>`).join('') + (coMode === 'pct' ? '<span class="co-note">柱顶数字是这一批的人数</span>' : ''); };
   // 默认选中：还有人在考核的批次里人数最多的一批（三种状态最可能同时出现）
-  let coMode = 'n', coSel = (eggCos.slice().sort((a, b) => b.list.length - a.list.length || b.i - a.i)[0] || CO[NW.last]).i, coHov = -1, coG = null;
+  let coMode = 'n', coSel = (eggCos.slice().sort((a, b) => b.list.length - a.list.length || b.i - a.i)[0] || CO[NW.last])?.i ?? -1, coHov = -1, coG = null;
   K.segmented($('#coSeg'), [{ value: 'n', label: '人数' }, { value: 'pct', label: '占比' }], (v) => { coMode = v; coLegend(); drawCohort(); }, { size: 'sm', value: 'n' });
   coLegend();
   const coTip = (c) => {
@@ -688,6 +700,10 @@
   };
   function drawCohort() {
     const host = $('#cohort');
+    if (!CO.length) {
+      host.innerHTML = K.empty({ art: 'egg', title: '暂无贡献记录', body: '有新人首次贡献后，这里会显示批次孵化情况。' });
+      return;
+    }
     const Wd = host.clientWidth; if (!Wd) return;
     const Hh = host.clientHeight;
     const padL = coMode === 'pct' ? 38 : 28, padR = 6, padT = 34, padB = 22;
@@ -782,6 +798,7 @@
   function renderCoPanel(anim) {
     const c = CO[coSel];
     const el = $('#coPanel');
+    if (!c) { el.hidden = true; return; }
     const sortP = (a, b) => b.bonus - a.bonus;
     const grp = (s) => {
       const L = c[s.k].slice().sort(sortP);
@@ -795,6 +812,7 @@
   }
   (function wireCohort() {
     const host = $('#cohort');
+    if (!CO.length) { drawCohort(); return; }
     host.classList.add('chart');
     host.tabIndex = 0;
     host.setAttribute('role', 'img');
@@ -882,7 +900,7 @@
   drawFunnel();
   document.addEventListener('nwk:theme', () => { drawFunnel(); drawCohort(); });
   if (location.hash === '#failed') setFold(true);
-  $('#soonGo').addEventListener('click', () => goNode('due'));
+  $('#soonGo')?.addEventListener('click', () => goNode('due'));
 })();
 </script>
 </body>

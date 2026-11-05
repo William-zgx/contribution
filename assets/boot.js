@@ -27,6 +27,16 @@
     return r.json();
   }
 
+  // derive.js 与 kit.js 要等 BOARD 写好才能执行，但下载不必等：先 preload，和 board.json 并行下载。
+  // 执行顺序仍由下面的 load()（async=false）决定；preload 只提前下载，路径须与 load() 完全一致才会复用。
+  for (const src of ['assets/derive.js', 'assets/kit.js']) {
+    const l = document.createElement('link');
+    l.rel = 'preload';
+    l.as = 'script';
+    l.href = src;
+    document.head.appendChild(l);
+  }
+
   async function start() {
     const [board] = await Promise.all([readBoard(), load('engine.js'), load('assets/icons.js')]);
     window.BOARD = board;

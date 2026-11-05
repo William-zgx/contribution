@@ -64,7 +64,10 @@ test('computeBoard no longer dilutes six merged PRs when collaboration increases
 });
 
 test('positive and negative model adjustments stay in the PR curve and reconcile with the total', () => {
-  for (const [model, weight] of [['Claude Opus', 1.3], ['TRAE', 0.9], ['', 1]]) {
+  const weightOf = (key) => RULES.models.find((m) => m.key === key).weight;
+  const opus = weightOf('opus');
+  const trae = weightOf('trae');
+  for (const [model, weight] of [['Claude Opus', opus], ['TRAE', trae], ['', 1]]) {
     const p = scorePerson([scorePr(1, TIME, model)], [scoreIssue(1)]);
     close(p.bonusPr + p.bonusModel, 30 * (1.9 * weight) / (30 + 1.9 * weight));
     close(p.bonusModel, p.bonusPr * (weight - 1));
@@ -72,7 +75,7 @@ test('positive and negative model adjustments stay in the PR curve and reconcile
     close([...p.weekly.values()][0], p.bonus);
   }
   const mixed = scorePerson([scorePr(1, TIME, 'Claude Opus'), scorePr(2, TIME, 'TRAE')]);
-  close(mixed.bonus, 30 * (1.9 * 2.2) / (30 + 1.9 * 2.2));
+  close(mixed.bonus, 30 * (1.9 * (opus + trae)) / (30 + 1.9 * (opus + trae)));
 });
 
 test('weeks reset at Monday 00:00 UTC+8 and future actions do not contribute', () => {

@@ -17,28 +17,39 @@ const RULES = {
   },
   // 按 commit 作者与共同作者（Co-Authored-By）的名字识别模型，PR 分乘以 weight。
   // 系数按组织偏好整体定档，不区分版本：Claude 强于 GPT；DeepSeek 胜在速度、Gemini 胜在成本，系数低于前两家。
+  // 没有署名的 PR 绝大多数也由 agent 编写，署名与否主要取决于工具配置，所以各档与「无 AI 标注」只拉开小幅差距。
   // 同一个署名按列表顺序取第一个匹配，所以扣分工具与更具体的代号排在前面。
   // 一个 PR 出现多个模型时取系数最高的；出现系数低于 1 的扣分工具时按扣分计。
   models: [
-    { key: 'trae', family: '其他', short: 'TRAE CLI', label: 'TRAE CLI', weight: 0.9, pattern: /\btrae\b/i },
-    { key: 'opus', family: 'Claude', short: 'Opus', label: 'Claude Opus', weight: 1.3, pattern: /\bopus\b/i },
-    { key: 'fable', family: 'Claude', short: 'Fable', label: 'Claude Fable', weight: 1.25, pattern: /\bfable\b/i },
-    { key: 'sonnet', family: 'Claude', short: 'Sonnet', label: 'Claude Sonnet', weight: 1.2, pattern: /\bsonnet\b/i },
-    { key: 'haiku', family: 'Claude', short: 'Haiku', label: 'Claude Haiku', weight: 1.1, pattern: /\bhaiku\b/i },
-    { key: 'claude', family: 'Claude', short: '未注明型号', label: 'Claude 未注明型号', weight: 1.1, pattern: /\bclaude\b/i },
-    { key: 'gptTop', family: 'GPT', short: 'Astra、Pro', label: 'GPT Astra / Pro', weight: 1.2, pattern: /\bgpt\b[\w. -]*?\b(astra|pro)\b/i },
-    { key: 'gptSol', family: 'GPT', short: 'Sol', label: 'GPT Sol', weight: 1.15, pattern: /\bgpt\b[\w. -]*?\bsol\b/i },
-    { key: 'gpt', family: 'GPT', short: 'Terra、Luna、mini 等，Codex 默认署名', label: 'GPT 其他', weight: 1.05, pattern: /\b(gpt|codex|openai|chatgpt)\b/i },
-    { key: 'geminiPro', family: 'Gemini', short: 'Carbon、Argon、Pro', label: 'Gemini Carbon / Argon', weight: 1.1, pattern: /\bgemini\b[\w. -]*?\b(carbon|argon|ultra|pro)\b/i },
-    { key: 'gemini', family: 'Gemini', short: 'Flash 等', label: 'Gemini 其他', weight: 1.05, pattern: /\bgemini\b/i },
-    { key: 'deepseekPro', family: 'DeepSeek', short: 'Pro、Reasoner', label: 'DeepSeek Pro', weight: 1.1, pattern: /\bdeepseek\b[\w. -]*?\b(pro|reasoner|r\d)\b/i },
-    { key: 'deepseek', family: 'DeepSeek', short: 'Flash 等', label: 'DeepSeek 其他', weight: 1.05, pattern: /\bdeepseek\b/i },
+    { key: 'trae', family: '其他', short: 'TRAE CLI', label: 'TRAE CLI', weight: 0.94, pattern: /\btrae\b/i },
+    { key: 'opus', family: 'Claude', short: 'Opus', label: 'Claude Opus', weight: 1.18, pattern: /\bopus\b/i },
+    { key: 'fable', family: 'Claude', short: 'Fable', label: 'Claude Fable', weight: 1.15, pattern: /\bfable\b/i },
+    { key: 'sonnet', family: 'Claude', short: 'Sonnet', label: 'Claude Sonnet', weight: 1.12, pattern: /\bsonnet\b/i },
+    { key: 'haiku', family: 'Claude', short: 'Haiku', label: 'Claude Haiku', weight: 1.06, pattern: /\bhaiku\b/i },
+    { key: 'claude', family: 'Claude', short: '未注明型号', label: 'Claude 未注明型号', weight: 1.06, pattern: /\bclaude\b/i },
+    { key: 'gptTop', family: 'GPT', short: 'Astra、Pro', label: 'GPT Astra / Pro', weight: 1.12, pattern: /\bgpt\b[\w. -]*?\b(astra|pro)\b/i },
+    { key: 'gptSol', family: 'GPT', short: 'Sol', label: 'GPT Sol', weight: 1.09, pattern: /\bgpt\b[\w. -]*?\bsol\b/i },
+    { key: 'gpt', family: 'GPT', short: 'Terra、Luna、mini 等，Codex 默认署名', label: 'GPT 其他', weight: 1.03, pattern: /\b(gpt|codex|openai|chatgpt)\b/i },
+    { key: 'geminiPro', family: 'Gemini', short: 'Carbon、Argon、Pro', label: 'Gemini Carbon / Argon', weight: 1.06, pattern: /\bgemini\b[\w. -]*?\b(carbon|argon|ultra|pro)\b/i },
+    { key: 'gemini', family: 'Gemini', short: 'Flash 等', label: 'Gemini 其他', weight: 1.03, pattern: /\bgemini\b/i },
+    { key: 'deepseekPro', family: 'DeepSeek', short: 'Pro、Reasoner', label: 'DeepSeek Pro', weight: 1.06, pattern: /\bdeepseek\b[\w. -]*?\b(pro|reasoner|r\d)\b/i },
+    { key: 'deepseek', family: 'DeepSeek', short: 'Flash 等', label: 'DeepSeek 其他', weight: 1.03, pattern: /\bdeepseek\b/i },
     { key: 'cursor', family: '其他', short: 'Cursor', label: 'Cursor', weight: 1, pattern: /\bcursor\b/i },
     { key: 'copilot', family: '其他', short: 'Copilot', label: 'Copilot', weight: 1, pattern: /\bcopilot\b/i },
   ],
   modelNone: { key: 'none', family: '其他', short: '无 AI 标注', label: '无 AI 标注', weight: 1 },
   // PR 打开超过这么多天仍未合入也未关闭，算作「未收尾」
   staleOpenDays: 14,
+  // 样式改动减分：已有样式文件的改动行占 PR 改动行的比例为 s 时，PR 分（含模型系数）乘 1 − s × (1 − weight)。
+  // 只改已有样式文件的 PR 乘 weight，不改已有样式文件的 PR 不变。样式文件按路径识别：pattern 匹配的扩展名与 Tailwind 配置。
+  // 新增的文件（changeType 在 newFileTypes 里）按非样式计：新写页面、组件连同它的样式是新功能，不打折；
+  // 修改、重命名、删除已有样式文件的行计入 s。
+  // 改动文件超过上传脚本读取上限时，未读到的文件按非样式计，所以比例是下限。
+  style: {
+    weight: 0.5,
+    newFileTypes: ['ADDED', 'COPIED'],
+    pattern: /(\.(css|scss|sass|less|styl|stylus|pcss|postcss)|(^|\/)tailwind\.config\.[cm]?[jt]s)$/i,
+  },
   newbie: {
     days: 30,
     merged: 3,
@@ -104,6 +115,22 @@ function weekStart(t, tzHours) {
 
 function toTime(s) {
   return s ? Date.parse(s) : null;
+}
+
+// 已有样式文件的改动行 ÷ PR 改动行，0–1。新增的样式文件按非样式计；没有文件明细（旧数据、测试快照）时按 0 计
+function styleShare(pr, rules) {
+  const total = pr.additions + pr.deletions;
+  if (!total || !pr.files?.nodes) return 0;
+  let style = 0;
+  for (const f of pr.files.nodes) {
+    if (rules.style.newFileTypes.includes(f.changeType)) continue;
+    if (rules.style.pattern.test(f.path)) style += f.additions + f.deletions;
+  }
+  return Math.min(1, style / total);
+}
+
+function styleFactor(pr, rules) {
+  return 1 - styleShare(pr, rules) * (1 - rules.style.weight);
 }
 
 function countUpTo(sorted, t) {
@@ -211,7 +238,8 @@ function computeBoard(data, rules, now) {
           lines,
           commits,
           model,
-          raw: prRawScore(lines, commits, rules),
+          // 样式系数乘在原始分上，模型加减随之按比例缩放
+          raw: prRawScore(lines, commits, rules) * styleFactor(pr, rules),
         });
       }
       let reviewed = false;

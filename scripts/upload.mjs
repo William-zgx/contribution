@@ -79,6 +79,16 @@ const CLOSER_QUERY = `query($ids: [ID!]!) {
   }
 }`;
 
+// 合入 PR 的改动文件，供引擎按已有样式文件占比计分（changeType 区分新增与修改）：files 是嵌套连接，同样只对合入 PR 单独查询，每批 100 个 PR 计 1 点。
+// 文件路径只在内存中参与计算，不写入 board.json。
+const FILES_LIMIT = 100;
+const FILES_BATCH = 100;
+const FILES_QUERY = `query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest { id files(first: ${FILES_LIMIT}) { nodes { path additions deletions changeType } } }
+  }
+}`;
+
 function batchQuery(numbers) {
   const items = numbers.map((n) => `n${n}: issueOrPullRequest(number: ${n}) { __typename ... on PullRequest { ${PR_FIELDS} } ... on Issue { ${ISSUE_FIELDS} } }`).join('\n');
   return `query($org: String!, $repo: String!) { repository(owner: $org, name: $repo) { ${items} } }`;
@@ -222,6 +232,7 @@ async function fetchAll(token, org) {
     }
   }
   await fetchClosers(token, loaded.flatMap((r) => r.prs.filter((p) => p.state === 'CLOSED')));
+  await fetchFiles(token, loaded.flatMap((r) => r.prs.filter((p) => p.mergedAt)));
   return { org, members: meta.members, repos: loaded.map(({ name, prs, issues }) => ({ name, prs, issues })) };
 }
 
@@ -244,6 +255,22 @@ async function fetchClosers(token, prs) {
   log(`查询了 ${ids.length} 个关闭未合入 PR 的关闭人，共 ${tasks.length} 批`);
 }
 
+// 给合入 PR 补上改动文件 files（{ nodes: [{ path, additions, deletions, changeType }] }）；查不到时保持缺失，引擎按非样式计
+async function fetchFiles(token, prs) {
+  const byId = new Map(prs.map((p) => [p.id, p]));
+  const ids = [...byId.keys()];
+  const tasks = [];
+  for (let i = 0; i < ids.length; i += FILES_BATCH) {
+    const chunk = ids.slice(i, i + FILES_BATCH);
+    tasks.push(async () => {
+      const d = await gql(token, FILES_QUERY, { ids: chunk }, { allowMissing: true });
+      for (const n of d.nodes) if (n?.files) byId.get(n.id).files = n.files;
+    });
+  }
+  await runPool(tasks, CONCURRENCY);
+  log(`查询了 ${ids.length} 个合入 PR 的改动文件，共 ${tasks.length} 批`);
+}
+
 // ---------- 输出 ----------
 
 const round = (x, digits = 2) => (typeof x === 'number' ? Math.round(x * 10 ** digits) / 10 ** digits : x);
@@ -255,7 +282,7 @@ function serialize(board) {
     org: board.org,
     now: board.now,
     generatedAt: new Date(board.now).toISOString(),
-    limits: { nested: NESTED_LIMIT, commits: COMMIT_LIMIT },
+    limits: { nested: NESTED_LIMIT, commits: COMMIT_LIMIT, files: FILES_LIMIT },
     summary: board.summary,
     weeks: board.weeks,
     people: board.people.map((p) => ({

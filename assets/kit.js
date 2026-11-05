@@ -35,12 +35,15 @@
   }
 
   // ───────────────────────── 格式（全站口径） ─────────────────────────
+  // 格式器只建一次：带 locale 的 toLocaleString 每次调用都会新建 Intl.NumberFormat，大榜单上很慢
+  const MAG_NF = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const INT_NF = new Intl.NumberFormat('zh-CN');
   // 魔力：任何地方都保留一位小数（87.0 而不是 87），列内对齐、正文口径一致
-  const mag = (x) => (Math.round((x || 0) * 10) / 10).toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const mag = (x) => MAG_NF.format(Math.round((x || 0) * 10) / 10);
   const fmt = {
     mag,
     f1: mag,
-    int: (x) => Math.round(x || 0).toLocaleString('zh-CN'),
+    int: (x) => INT_NF.format(Math.round(x || 0)),
     pct: (x, d = 0) => `${((x || 0) * 100).toFixed(d)}%`,
     // 带符号；负号用真正的减号 −
     signed: (d, f = fmt.int) => (d > 0 ? '+' : d < 0 ? '−' : '±') + f(Math.abs(d)),

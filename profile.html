@@ -243,6 +243,8 @@
   .vit-row .num { text-align: right; color: var(--ink-3); font-variant-numeric: tabular-nums; }
   .vit-row .num b { color: var(--ink); font-weight: 650; }
   .vit-note, .vit-none { margin: 12px 0 0; font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.6; }
+  /* 屏外行跳过布局与绘制。contain-intrinsic-size 指内容盒：.lrow 48px 减去上下内边距与下边框为 35px */
+  #rows > .lrow { content-visibility: auto; contain-intrinsic-size: auto 35px; }
 </style>
 </head>
 <body>

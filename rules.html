@@ -33,7 +33,7 @@
   .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; border-left: 1px solid var(--line); }
   .toc a { position: relative; display: flex; align-items: baseline; gap: 8px; margin-left: -1px; padding: 6px 10px 6px 12px; border-left: 2px solid transparent; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--fs-sm); color: var(--ink-3); transition: color var(--dur-1), background-color var(--dur-1), border-color var(--dur-2); }
   .toc a:hover { color: var(--ink); background: var(--surface-hover); }
-  .toc a .i { font-size: var(--fs-2xs); font-weight: 650; color: var(--ink-4); font-variant-numeric: tabular-nums; min-width: 1.4em; }
+  .toc a .i { font-size: var(--fs-2xs); font-weight: 650; color: var(--ink-3); font-variant-numeric: tabular-nums; min-width: 1.4em; }
   .toc a[aria-current="true"] { color: var(--leaf-ink); font-weight: 650; border-left-color: var(--leaf); background: var(--leaf-wash); }
   .toc a[aria-current="true"] .i { color: var(--leaf-ink); }
   .rl-main { min-width: 0; }
@@ -379,6 +379,7 @@
       dormant: { name: '冬眠', tag: 'tag tag-sleep', icon: 'moon-z', text: `超过 ${R.dormantDays} 天没有任何动作。只做标记；${R.levels[R.dormantExemptLevel].name}及以上不标记。` },
       laggard: { name: '掉队', tag: 'tag tag-warn', icon: 'trending-down', text: `活力低于 ${R.vitality.laggard}。活力综合近期产出、持续度、历史信用与最近动作，见「活力与掉队」。名单用于定期清理不再贡献的人；只做提醒，不影响魔力与形态。` },
       watch: { name: '观察', tag: 'tag tag-watch', icon: 'eye', text: `活力在 ${R.vitality.laggard} 到 ${R.vitality.watch} 之间：贡献在变少，还没到掉队。本周有一次合入或协作，通常就能回升。` },
+      style: { name: '样式改动', text: `修改已有的样式文件（CSS、SCSS、Less、Stylus 等样式表，以及 Tailwind 配置）。PR 分按这部分改动行的占比打折：只改已有样式的 PR 乘 ×${R.style.weight}，占一半的 PR 乘 ×${+(1 - 0.5 * (1 - R.style.weight)).toFixed(2)}，不改的不变。新增的样式文件和新页面、新组件一样算新功能，不打折。` },
     };
   })();
 
@@ -707,7 +708,7 @@
   (() => {
     const rows = [
       ['注册时间', '首次贡献', '首次开 PR、review、评论或提 issue 的时间。GitHub 不向普通成员开放入组时间。'],
-      ['上传量', 'PR 分', '合入 PR 按改动行、commit 数（对数压缩）和模型系数计分。'],
+      ['上传量', 'PR 分', '合入 PR 按改动行、commit 数（对数压缩）和模型系数计分；修改已有样式文件的改动按占比打折，新增文件不打折。'],
       ['下载量', '不考核', 'GitHub 上 review 和评论极少，考核协作会误伤大多数人；协作只计入魔力。', true],
       ['分享率', '合入率', '「给出 ÷ 收到 review」对所有人都是 0/0。合入率看 PR 是否收尾，作用接近 H&R。'],
       ['做种魔力', `魔力（PR 与协作分别按递减曲线）`, '贡献越多仍会增加得分，但单次增量变小；两类贡献互不稀释。'],
@@ -806,12 +807,14 @@
     `模型来自 commit 的 Co-Authored-By 标记，是提交者自行声明的文本，可以伪造，也可以删掉；只看每个 PR 最后 ${LIM.commits} 个 commit。删掉了标记的 PR 按「无 AI 标注」计，所以 AI 占比是下限。`,
     'Codex CLI 默认署名「Codex」、Cursor 默认署名「Cursor」，都不含型号，分别按「GPT 其他」和 ×1 计。需要按型号计分时，在工具里把署名配置成带型号的名字（如 Codex 的 commit_attribution）。TRAE CLI 默认署名「TRAE CLI」，按扣分计。',
     '模型系数按组织偏好整体定档：Claude 强于 GPT；DeepSeek 胜在速度、Gemini 胜在成本，系数低于前两家。不区分版本，也不对应具体的基准测试分数；出现新的型号名或代号时需要更新识别规则。',
+    '没有 AI 署名的 PR 绝大多数也由 agent 编写，署名与否主要取决于工具配置，所以各档系数与「无 AI 标注」的 ×1 只拉开小幅差距，PR 分主要由改动行和 commit 数决定。',
     '直接推送到默认分支的 commit 不计入；仓库要求「所有改动走 PR」之前的贡献会被低估。',
     'AI 生成的 PR 记在开 PR 的账号名下，账号持有人对内容负责。',
     `每个 PR 和 issue 只读取前 ${LIM.nested} 条 review 和前 ${LIM.nested} 条评论。`,
     `活力里的产出只看魔力；只开 PR 未合入只体现在「最近动作」。线下讨论、组织外的工作都不计。本周还没结束时，本周只算到数据更新时刻。从未贡献的组织成员不在任何名单里，只以人数出现在首页。`,
     `「首次贡献」代替入组时间；第一次贡献很早、之后长期不活跃的人，新手考核会按那次贡献起算，之后要靠魔力达到 ${R.levels[1].bonus} 孵化。`,
     '页面上的「我」是访客自己选的账号，只存在这个浏览器里，不是登录，也不验证账号归属；换浏览器要重新选。它只影响页面怎么标记和排布，不影响任何人的魔力与名次。',
+    `样式改动按文件路径和文件状态识别，不看改动内容：新增的样式文件不算样式改动，修改、重命名、删除已有样式文件才算；只改 JS、TSX 里 className 或 style 字符串的 PR、写在 .ts 里的主题令牌都按非样式计。每个 PR 只读取${LIM.files ? `前 ${LIM.files} 个` : '有限数量的'}改动文件，读不到的文件按非样式计，所以样式占比是下限。`,
   ].map((t) => `<li>${esc(t)}</li>`).join('');
 
   // ───────── 命令面板 ─────────
