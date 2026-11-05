@@ -291,6 +291,8 @@
       </div>
       <div class="lb-meta" id="lbMeta" aria-live="polite"></div>
       <div class="lb-filters chips" id="chips" role="group" aria-label="筛选"></div>
+      <!-- 我的名次：列表之外的摘要，不占名次、不计入人数 -->
+      <div class="me-strip me-sum" id="meSum" aria-live="polite"></div>
       <div class="lb">
         <div class="lrow lrow-head" role="presentation">
           <span class="r c-rank">#</span>
@@ -524,7 +526,7 @@
     }
     const vs = st.win === 'all' ? (p.tw > 0.005 ? `本周 +${mag(p.tw)}` : '本周 —') : st.win === 'week' ? `累计 ${mag(p.bonus)}` : `周均 ${mag(p.pace)}`;
     const spark = K.sparkline(p.spark, { w: 88, h: 22, max: SPARK_MAX });
-    return `<div class="lrow is-click" role="option" id="opt-${esc(p.login)}" aria-selected="${k === st.sel}" data-key="${esc(p.login)}" data-login="${esc(p.login)}">`
+    return `<div class="lrow is-click ${K.me.is(p) ? 'is-me' : ''}" role="option" id="opt-${esc(p.login)}" aria-selected="${k === st.sel}" data-key="${esc(p.login)}" data-login="${esc(p.login)}">`
       + `<span class="c-rank rank ${rank <= 3 ? 'top' : ''}">${rank}</span>${deltaCell(r)}`
       + `<span class="c-who" style="min-width:0">${who}</span><span class="c-form">${formCell(p)}</span>`
       + `<span class="c-comp">${comp}</span>`
@@ -565,6 +567,52 @@
     const why = st.q ? `没有账号包含「${esc(st.q)}」${st.win !== 'all' ? `，或者这个人${winName[st.win]}还没有魔力` : ''}。` : st.win !== 'all' ? `${winName[st.win]}榜只排有魔力的人；换成总榜看看。` : '换个条件，或清除筛选再看看。';
     return `<div class="lb-empty">${K.empty({ art: st.q ? 'egg' : 'tadpole', title: '没有符合条件的人', body: why, action: `<button type="button" class="btn btn-sm" data-clear>${icon('x', 14)}清除${st.q ? '搜索和' : ''}筛选</button>` })}</div>`;
   }
+  // ───── 我的名次（这个浏览器记住的账号）─────
+  // 名次来自当前时间窗筛选前的完整榜单：总榜用 p.rank，本周 / 近 4 周用该窗的名次；该窗没有魔力就没有名次，不拿累计名次冒充
+  function meSumHTML(full, list) {
+    const s = K.me.state();
+    if (s === 'unset') return `<div class="me-strip me-sum is-unset">${icon('user-plus', 18)}<span class="ms-txt">想直接看到自己的名次？选一次账号，这个浏览器会记住。</span><span class="ms-act"><button type="button" class="btn btn-sm" data-action="me-pick">找到我</button></span></div>`;
+    if (s === 'missing') return `<div class="me-strip me-sum is-miss">${icon('alert-triangle', 18)}<span class="ms-txt">当前公开快照未找到你记住的 <b>@${esc(K.me.pref.login)}</b>，可能是改名或尚未更新</span><span class="ms-act"><button type="button" class="btn btn-sm" data-action="me-pick">重新选择</button><button type="button" class="btn btn-sm btn-ghost" data-action="me-forget">不再记住</button></span></div>`;
+    const p = K.me.person, name = winName[st.win];
+    const mine = full.find((r) => r.p === p);
+    const idx = list.findIndex((r) => r.p === p);
+    const head = `${K.avatar(p.login, 28, { dim: p.dormant })}<span class="ms-id"><span class="ms-k">我的${name}名次</span><b>@${esc(p.login)}</b></span>`;
+    const profileBtn = `<button type="button" class="btn btn-sm btn-ghost" data-action="me-go">查看档案</button>`;
+    if (!mine) {
+      return `<div class="me-strip me-sum is-set">${head}<span class="ms-big muted">—</span><span class="ms-note">${name}魔力 0 · 暂无${name}名次；累计 <b>${mag(p.bonus)}</b>，总榜 #${p.rank}</span>`
+        + `<span class="ms-act"><button type="button" class="btn btn-sm" data-me="all">${icon('target', 14)}查看总榜中的我</button>${profileBtn}</span></div>`;
+    }
+    let note, act;
+    if (idx < 0) { note = `当前筛选未包含你 · ${name}魔力 <b>${mag(mine.v)}</b>`; act = `<button type="button" class="btn btn-sm" data-me="clear">${icon('target', 14)}清除筛选并定位我</button>`; }
+    else if (idx >= LIMIT && !st.all) { note = `${name}魔力 <b>${mag(mine.v)}</b> · 未在当前前 ${LIMIT} 条中`; act = `<button type="button" class="btn btn-sm" data-me="locate">${icon('target', 14)}定位我</button>`; }
+    else { note = `${name}魔力 <b>${mag(mine.v)}</b>${st.win === 'all' && p.tw > 0.005 ? ` · 本周 +${mag(p.tw)}` : ''}`; act = `<button type="button" class="btn btn-sm" data-me="locate">${icon('target', 14)}定位我</button>`; }
+    return `<div class="me-strip me-sum is-set">${head}<span class="ms-big">#${mine.rank}</span><span class="ms-note">${note}</span><span class="ms-act">${act}${profileBtn}</span></div>`;
+  }
+  // 定位：需要时展开全部、滚到我这一行并闪一下。不改排序，也不改键盘选中态
+  function locateMe({ clear = false, all = false } = {}) {
+    const p = K.me.person;
+    if (!p) return;
+    if (all && st.win !== 'all') { st.win = 'all'; seg.set('all', { silent: true }); }
+    if (clear || all) { st.mem = 'all'; st.form = null; st.flags.clear(); st.q = ''; qEl.value = ''; }
+    if (clear || all) syncURL();
+    st.sel = -1;
+    const idx = filtered().findIndex((r) => r.p === p);
+    if (idx >= LIMIT) st.all = true;
+    render({ animate: false });
+    const row = rowsEl.querySelector('.lrow.is-me');
+    if (!row) return;
+    row.scrollIntoView({ block: 'center', behavior: K.reduced() ? 'auto' : 'smooth' });
+    row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+  }
+  // 时间窗与状态筛选写回地址：清除筛选后刷新不会把旧 flag 再带回来
+  function syncURL() {
+    const u = new URL(location.href);
+    if (st.win === 'all') u.searchParams.delete('win'); else u.searchParams.set('win', st.win);
+    u.searchParams.delete('flag');
+    for (const f of st.flags) u.searchParams.append('flag', f);
+    history.replaceState(history.state, '', u);
+  }
+
   let lastList = [];
   function render({ animate = true, chips = true } = {}) {
     const total = windowRows(st.win).length;
@@ -578,6 +626,7 @@
       paintSparkHi();
     };
     if (animate) K.flip(rowsEl, paint); else paint();
+    $('#meSum').outerHTML = meSumHTML(windowRows(st.win), list).replace('class="me-strip me-sum', 'id="meSum" aria-live="polite" class="me-strip me-sum');
     $('#lbMeta').innerHTML = meta(list.length, total);
     $('#lbFoot').innerHTML = footHTML(list.length);
     $('#hVal').textContent = st.win === 'all' ? '魔力' : `${winName[st.win]}魔力`;
@@ -589,9 +638,7 @@
   const seg = K.segmented($('#winSeg'), [{ value: 'all', label: '总榜' }, { value: 'week', label: '本周' }, { value: 'l4', label: '近 4 周' }], (v) => setWin(v), { value: st.win });
   function setWin(v) {
     st.win = v; st.sel = -1;
-    const u = new URL(location.href);
-    if (v === 'all') u.searchParams.delete('win'); else u.searchParams.set('win', v);
-    history.replaceState(history.state, '', u);
+    syncURL();
     render();
   }
   $('#chips').addEventListener('click', (e) => {
@@ -601,6 +648,7 @@
     else if (g === 'form') st.form = st.form === v ? null : v;
     else st.flags.has(v) ? st.flags.delete(v) : st.flags.add(v);
     st.sel = -1;
+    syncURL();
     render();
     const again = $(`#chips .chip[data-g="${g}"][data-v="${v}"]`);
     if (again) again.focus({ preventScroll: true });
@@ -641,7 +689,7 @@
     const r = e.target.closest('.lrow');
     if (r && !e.target.closest('[data-person]')) K.openPerson(r.dataset.login);
   });
-  function clearAll() { st.mem = 'all'; st.form = null; st.flags.clear(); st.q = ''; qEl.value = ''; render(); }
+  function clearAll() { st.mem = 'all'; st.form = null; st.flags.clear(); st.q = ''; qEl.value = ''; syncURL(); render(); }
   $('#lbFoot').addEventListener('click', (e) => {
     if (!e.target.closest('#moreBtn')) return;
     const wasAll = st.all;
@@ -679,6 +727,26 @@
   K.cmdk.add({ label: '时光机：从头回放', icon: 'play', run: () => { $('#tmCard').scrollIntoView({ block: 'start' }); TM.play(true); } });
 
   render({ animate: false });
+  // 事件监听器是闭包里的常量，摘要是 outerHTML 重绘的：把点击委托重新挂到新节点上
+  $('#lbCard').addEventListener('click', (e) => {
+    const b = e.target.closest('#meSum [data-me]');
+    if (!b) return;
+    const a = b.dataset.me;
+    if (a === 'locate') locateMe();
+    else if (a === 'clear') locateMe({ clear: true });
+    else if (a === 'all') locateMe({ all: true });
+  });
+  // 记住 / 不再记住后，摘要与行内标记跟着变
+  K.me.subscribe(() => render({ animate: false }));
+  // #me：从顶栏菜单或命令面板的「我的总榜名次」进来，切到总榜、清掉筛选并定位我
+  function hashMe() {
+    if (location.hash !== '#me') return;
+    history.replaceState(history.state, '', location.pathname + location.search);
+    if (K.me.person) locateMe({ all: true });
+    else K.mePicker.open();
+  }
+  addEventListener('hashchange', hashMe);
+  hashMe();
 
   // ═════════════════ 时光机 ═════════════════
   const TM = (() => {
