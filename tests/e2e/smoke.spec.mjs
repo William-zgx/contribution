@@ -51,6 +51,55 @@ test('?theme=dark 切到暗色，导航时保留', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
+const THEME_KEY = 'nwverse:contribution:theme';
+for (const scheme of ['light', 'dark']) {
+  const other = scheme === 'dark' ? 'light' : 'dark';
+  test(`系统${scheme === 'dark' ? '深色' : '浅色'}下切换主题，经顶栏换页、刷新后保持；切回后重新跟随系统`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await open(page, '/index.html');
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-theme', scheme);
+    await page.locator('#appbar [data-theme-toggle]').click();
+    await expect(html).toHaveAttribute('data-theme', other);
+    await page.locator('#appbar .nav a[data-screen="c2"]').click();
+    await expect(page).toHaveURL(/ranking\.html$/);
+    await expect(html).toHaveAttribute('data-theme', other);
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', other);
+    // 切回与系统相同的主题：不再记住，之后跟随系统变化
+    await page.locator('#appbar [data-theme-toggle]').click();
+    await expect(html).toHaveAttribute('data-theme', scheme);
+    expect(await page.evaluate((k) => localStorage.getItem(k), THEME_KEY)).toBeNull();
+    await page.emulateMedia({ colorScheme: other });
+    await expect(html).toHaveAttribute('data-theme', other);
+  });
+}
+
+test('?theme=dark 下切到白天，顶栏链接带上新主题，换页后保持', async ({ page }) => {
+  await open(page, '/index.html?theme=dark');
+  await page.locator('#appbar [data-theme-toggle]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page).toHaveURL(/index\.html\?theme=light/);
+  await expect(page.locator('#appbar .nav a[data-screen="c2"]')).toHaveAttribute('href', 'ranking.html?theme=light');
+  await page.locator('#appbar .nav a[data-screen="c2"]').click();
+  await expect(page).toHaveURL(/ranking\.html\?theme=light/);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
+
+test('记住的主题在第一帧前生效，?theme 参数优先于记住的选择', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.addInitScript((k) => localStorage.setItem(k, 'dark'), THEME_KEY);
+  // 推迟 kit.js，确认 boot.js 自己就写对了主题（否则 kit.js 加载前会闪一下系统主题）
+  await page.route('**/assets/kit.js', async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  await page.goto('/index.html', { waitUntil: 'commit' });
+  await page.waitForFunction(() => document.documentElement.classList.contains('is-booting'));
+  expect(await page.evaluate(() => [document.documentElement.dataset.theme, !!window.NWK])).toEqual(['dark', false]);
+  await expect(page.locator('html')).not.toHaveClass(/is-booting/);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await open(page, '/index.html?theme=light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
+
 test('derive.js 与 kit.js 和 data/board.json 并行下载，且各只请求一次', async ({ page }) => {
   await open(page, '/index.html');
   const res = await page.evaluate(() => performance.getEntriesByType('resource')

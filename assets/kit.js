@@ -406,11 +406,20 @@
   }
 
   // ───────────────────────── 主题 ─────────────────────────
+  // 优先级：?theme 参数 → 本浏览器记住的选择（localStorage）→ 跟随系统。boot.js 用同一规则。
+  // 只在用户选的和系统不同时才记住；切回与系统相同的主题就清掉，重新跟随系统。
   const theme = (() => {
-    const p = qs.get('theme');
-    const forced = p === 'light' || p === 'dark' ? p : null;
-    let source = forced ? 'param' : 'system';
-    root.dataset.theme = forced || (mqDark.matches ? 'dark' : 'light');
+    const KEY = 'nwverse:contribution:theme';
+    const valid = (t) => (t === 'light' || t === 'dark' ? t : null);
+    const sys = () => (mqDark.matches ? 'dark' : 'light');
+    const stored = () => { try { return valid(localStorage.getItem(KEY)); } catch (e) { return null; } };
+    function remember(t) {
+      try { if (t === sys()) localStorage.removeItem(KEY); else localStorage.setItem(KEY, t); } catch (e) { /* 存不了就只对本页生效 */ }
+    }
+    const forced = valid(qs.get('theme'));
+    const saved = stored();
+    let source = forced ? 'param' : saved ? 'user' : 'system';
+    root.dataset.theme = forced || saved || sys();
     const get = () => root.dataset.theme;
     function sync() {
       const t = get();
@@ -429,7 +438,7 @@
     // origin = {x, y} 时用圆形扩散（View Transitions）；否则直接切换
     function set(t, { origin = null, from = 'user' } = {}) {
       if (t !== 'light' && t !== 'dark') return;
-      if (from !== 'system') source = from;
+      if (from === 'user') { remember(t); if (source !== 'param') source = t === sys() ? 'system' : 'user'; }
       if (t === get()) { sync(); return; }
       if (!origin || !document.startViewTransition || reduced()) { apply(t); return; }
       const { x, y } = origin;
@@ -444,9 +453,18 @@
       const t = get() === 'dark' ? 'light' : 'dark';
       set(t, { origin, from: 'user' });
       if (inFrame) { try { window.parent.postMessage({ type: 'nw:theme-changed', theme: t }, '*'); } catch (e) { /* 忽略 */ } }
-      else if (forced || qs.has('theme')) { const u = new URL(location.href); u.searchParams.set('theme', t); history.replaceState(history.state, '', u); }
+      else if (forced || qs.has('theme')) {
+        const u = new URL(location.href); u.searchParams.set('theme', t); history.replaceState(history.state, '', u);
+        // 顶栏、标签栏等站内链接是加载时按旧参数拼的，一起改成新主题
+        $$('a[data-screen]').forEach((a) => {
+          const h = new URL(a.getAttribute('href'), location.href);
+          if (h.origin === location.origin && h.searchParams.has('theme')) { h.searchParams.set('theme', t); a.setAttribute('href', h.pathname.split('/').pop() + h.search + h.hash); }
+        });
+      }
     }
     mqDark.addEventListener('change', (e) => { if (source === 'system') set(e.matches ? 'dark' : 'light', { from: 'system' }); });
+    // 从 bfcache 返回时，页面还是离开时的主题；按记住的选择重新应用
+    addEventListener('pageshow', (e) => { if (e.persisted && source !== 'param') set(stored() || sys(), { from: 'system' }); });
     document.addEventListener('click', (e) => {
       const b = e.target.closest('[data-theme-toggle]');
       if (b) { const r = b.getBoundingClientRect(); toggle({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); return; }

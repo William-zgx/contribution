@@ -4,10 +4,12 @@
   'use strict';
   const root = document.documentElement;
 
-  // 主题在第一帧前写到 <html>，避免闪烁；规则与 kit.js 一致：?theme 参数优先，否则跟随系统
-  const forced = new URLSearchParams(location.search).get('theme');
-  root.dataset.theme = forced === 'light' || forced === 'dark' ? forced
-    : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // 主题在第一帧前写到 <html>，避免闪烁；规则与 kit.js 一致：?theme 参数 → 记住的选择 → 跟随系统
+  const valid = (t) => (t === 'light' || t === 'dark' ? t : null);
+  let saved = null;
+  try { saved = valid(localStorage.getItem('nwverse:contribution:theme')); } catch (e) { /* 读不了就跟随系统 */ }
+  root.dataset.theme = valid(new URLSearchParams(location.search).get('theme')) || saved
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   root.classList.add('is-booting');
 
   // 动态插入的脚本设 async=false：并行下载、按插入顺序执行
