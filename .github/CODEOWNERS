@@ -1,0 +1,10 @@
+# 以下路径的改动需要任一管理员批准，其余路径通过 CI 后可自助合并。
+# engine.js、scripts/：管理员发布时带 token 在本机执行，并决定公开数据的字段。
+# anonymize.mjs：处理未脱敏的组织数据，输出会提交到仓库。
+# .github/、AGENTS.md、CLAUDE.md：CI、审批规则与项目规范。
+/engine.js                     @nslogmeng @chyroc @fuergaosi233
+/scripts/                      @nslogmeng @chyroc @fuergaosi233
+/tests/fixtures/anonymize.mjs  @nslogmeng @chyroc @fuergaosi233
+/.github/                      @nslogmeng @chyroc @fuergaosi233
+/AGENTS.md                     @nslogmeng @chyroc @fuergaosi233
+/CLAUDE.md                     @nslogmeng @chyroc @fuergaosi233

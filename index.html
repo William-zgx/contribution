@@ -15,6 +15,7 @@
   /* 本页布局；颜色、字号、圆角、动效一律用令牌 */
 
   /* ── 首屏大卡：桌面两栏，手机重排（周选择器提到导语之前） ── */
+  #meStrip { margin-bottom: var(--s-4); }
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) 440px; column-gap: var(--s-10);
     grid-template-areas: "date pond" "story pond" "kpis kpis" "sel sel" "foot foot"; }
   .hero-date { grid-area: date; padding: var(--s-6) 0 0 28px; }
@@ -195,6 +196,9 @@
 <header id="appbar"></header>
 
 <main class="page">
+  <!-- 我的本周：这个浏览器记住的账号（未设置时是一条「找到我」提示） -->
+  <section class="me-strip" id="meStrip" aria-label="我的本周" hidden></section>
+
   <!-- 首屏：这一周发生了什么 -->
   <section class="card card-hero hero" id="hero" aria-label="周快照">
     <div class="hero-date"><div class="dateline" id="dateline"></div></div>
@@ -225,7 +229,7 @@
         <div class="card">
           <div class="card-head"><div><div class="card-title"><span class="card-icon leaf" aria-hidden="true" id="icBoard"></span><span id="boardTitle">本周魔力榜</span></div><div class="card-sub" id="boardSub"></div></div></div>
           <div class="card-body"><div class="rows board" id="board" role="list"></div><div class="board-more"><button type="button" class="btn btn-sm btn-ghost" id="boardMore"></button></div></div>
-          <div class="card-foot"><span id="boardFoot"></span><a class="link" href="ranking.html" data-screen="c2">完整排行榜<span id="icArrow1"></span></a></div>
+          <div class="card-foot"><span id="boardFoot"></span><a class="link" href="ranking.html?win=week" data-screen="c2" id="boardLink"><span id="boardLinkTxt">完整本周榜</span><span id="icArrow1"></span></a></div>
         </div>
       </div>
       <div class="span-4">
@@ -680,7 +684,7 @@
         // 组织外写进副行：标签放在名字行会把名字挤成省略号
         const sub = `${fo.name} · 总榜 #${NW.ranksAt(f.i).get(x.p.login)}${x.p.member ? '' : ' · <span class="out">组织外</span>'}`;
         const tags = '';
-        return `<div class="lrow is-click" role="listitem" data-key="${esc(x.p.login)}" data-login="${esc(x.p.login)}">`
+        return `<div class="lrow is-click ${K.me.is(x.p.login) ? 'is-me' : ''}" role="listitem" data-key="${esc(x.p.login)}" data-login="${esc(x.p.login)}">`
           + `<span class="rank ${x.rank <= 3 ? 'top' : ''}" style="font-size:var(--fs-sm)">${x.rank}</span>`
           + `<span style="min-width:0">${K.who(x.p, { size: 26, sub, tags })}</span>`
           + `<span class="val r" style="font-size:var(--fs-sm)">${mag(x.v)}</span>`
@@ -689,6 +693,8 @@
     };
     if (animate) K.flip(board, paint, { stagger: 12 }); else paint();
     $('#boardFoot').textContent = f.s.top.length > 10 ? `还有 ${f.s.top.length - 10} 人获得魔力` : f.s.top.length ? `获得魔力的全部 ${f.s.top.length} 人` : '每人每周最多按 10 个动作计分';
+    $('#boardLink').href = f.live ? 'ranking.html?win=week' : 'ranking.html';
+    $('#boardLinkTxt').textContent = f.live ? '完整本周榜' : '当前总榜';
     paintBoardMore();
   }
   board.addEventListener('click', (e) => {
@@ -828,6 +834,47 @@
     $('#pageFoot').innerHTML = `${icon('info', 13)}<span>数据快照 ${esc(fmt.datetime(NW.now))}（UTC+8）。页面只展示人维度的贡献度与组织级汇总；规则口径见排行榜页的「口径与盲区」。</span>`;
   })();
 
+  // ───────── 我的本周（这个浏览器记住的账号；随所选周变化） ─────────
+  const meStrip = $('#meStrip');
+  function renderMeStrip() {
+    const s = K.me.state();
+    const i = cur < 0 ? LAST : cur;
+    meStrip.hidden = false;
+    if (s === 'unset') {
+      meStrip.className = 'me-strip is-unset';
+      meStrip.innerHTML = `${icon('user-plus', 22)}<span class="ms-txt"><b>想直接看到自己的本周魔力？</b><span>选择账号，这个浏览器会记住。</span></span><span class="ms-act"><button type="button" class="btn btn-primary btn-sm" data-action="me-pick">找到我</button></span>`;
+      return;
+    }
+    if (s === 'missing') {
+      meStrip.className = 'me-strip is-miss';
+      meStrip.innerHTML = `${icon('alert-triangle', 22)}<span class="ms-txt"><b>当前公开快照未找到你记住的 @${esc(K.me.pref.login)}</b><span>可能是改名或数据尚未更新；不是零分，也不代表没有贡献。</span></span><span class="ms-act"><button type="button" class="btn btn-sm" data-action="me-pick">重新选择</button><button type="button" class="btn btn-sm btn-ghost" data-action="me-forget">不再记住</button></span>`;
+      return;
+    }
+    const p = K.me.person;
+    const live = i === LAST;
+    const label = `${live ? '我的本周' : i === LAST - 1 ? '我的上周' : '我的这一周'} · ${K.week.range(i)}`;
+    const act = `<span class="ms-act"><button type="button" class="btn btn-sm" data-action="me-go">${icon('user', 14)}查看我的档案</button><button type="button" class="btn btn-sm btn-ghost" data-action="me-pick">更换</button><button type="button" class="btn btn-sm btn-ghost" data-action="me-forget">不再记住</button></span>`;
+    meStrip.className = 'me-strip is-set';
+    if (!p.started[i]) {
+      meStrip.innerHTML = `${K.avatar(p.login, 40)}<span class="ms-id"><span class="eyebrow">${label}</span><b>@${esc(p.login)}</b><small>截至这一周，快照里还没有你的贡献记录；首次贡献在 ${fmt.md(p.firstAt)}</small></span>${act}`;
+      return;
+    }
+    const v = wkv(p, i), pv = wkv(p, i - 1);
+    let l4 = 0; for (let k = i - 3; k <= i; k++) l4 += wkv(p, k);
+    const rank = NW.ranksAt(i).get(p.login);
+    const fo = K.formOf(p, i);
+    const stats = [
+      [`${live ? '本周' : '这一周'}魔力`, v > 0.005 ? `+${mag(v)}` : '0', i > 0 ? `${K.week.prevName(i)} ${pv > 0.005 ? `+${mag(pv)}` : '0'}` : '有记录的第一周'],
+      ['近 4 周', `+${mag(l4)}`, `周均 ${mag(l4 / 4)}`],
+      [live ? '累计魔力' : '当时累计', mag(p.cum[i]), live ? (p.next ? `离${LV[p.next.level].name}还差 ${mag(p.gap)}` : p.level === null ? `攒到 ${NW.RULES.hatchBonus} 直接孵化` : '已到最高形态') : `截至 ${K.week.short(i)} 这一周末`],
+    ];
+    meStrip.innerHTML = `${K.avatar(p.login, 40, { dim: p.dormant })}<span class="ms-id"><span class="eyebrow">${label}</span><b>@${esc(p.login)}</b><small>${fo.name} · ${live ? '总榜' : '当时总榜'} #${rank}</small></span>`
+      + `<span class="ms-stats">${stats.map(([k, v2, s2]) => `<span class="st"><span class="label">${k}</span><b class="num">${v2}</b><small>${s2}</small></span>`).join('')}</span>${act}`;
+  }
+  K.me.subscribe(() => { renderMeStrip(); renderPanelsAgain(); });
+  // 记住 / 不再记住后，三张卡里的「我」标记要跟着变
+  function renderPanelsAgain() { panelsFor = -1; renderPanels(false, false); }
+
   // ───────── 切周 ─────────
   let cur = -1, settleT = 0, panelsFor = -1, lastTitle = '';
   function renderDateline(i) {
@@ -874,6 +921,7 @@
     chartA.update({ hi: i, valueLabel: NW.weeks[i].active > 0 });
     chartM.update({ hi: i, valueLabel: NW.weeks[i].merged > 0 });
     $('#peopleEyebrow').textContent = f.live ? `本周 · ${K.week.range(i)}` : `${K.week.name(i)} · ${K.week.range(i)}`;
+    renderMeStrip();
     const note = i === LAST ? K.week.note(i) : i === 0 ? '这是有记录的第一周，没有可对比的前一周。' : `「较前一周」对比的是 ${K.week.short(i - 1)} 那一周全周。`;
     $('#heroNote').innerHTML = `${icon('info', 13)}<span>${note}活跃 = 提 PR、合入或协作的人；魔力每人每周最多按 10 个动作计分。</span>`;
     if (!first) K.week.toURL(i);
