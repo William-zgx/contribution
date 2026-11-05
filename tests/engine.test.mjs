@@ -89,7 +89,7 @@ test('AI signatures from Claude Code, Codex, Cursor and TRAE are recognized', ()
   const cases = [
     ['Claude', 'claude'], ['Claude Code', 'claude'], ['claude[bot]', 'claude'],
     ['Claude Opus 5.5', 'opus'], ['Claude Opus 5.5 (1M context)', 'opus'], ['Claude Opus', 'opus'], ['claude-opus-4-7', 'opus'],
-    ['天童ケイ (Claude Opus 5.5)', 'opus'],
+    ['Alex Chen (Claude Opus 5.5)', 'opus'],
     ['Claude Fable 5.1', 'fable'], ['Claude Sonnet 5.5', 'sonnet'], ['Claude Haiku 5.5', 'haiku'],
     ['Codex', 'gpt'], ['GPT-6 (Codex)', 'gpt'], ['Codex (GPT-6-Astra)', 'gptTop'], ['GPT-6.1 Sol', 'gptSol'],
     ['Gemini', 'gemini'], ['Gemini 2.5 Flash', 'gemini'], ['Gemini CLI', 'gemini'], ['Gemini 3 Pro', 'geminiPro'],
@@ -100,7 +100,7 @@ test('AI signatures from Claude Code, Codex, Cursor and TRAE are recognized', ()
 
 test('human names containing model words are not counted as AI', () => {
   for (const name of ['Claude Dupont', 'Jean-Claude Van', 'Claude Sonnet Smith', 'Sonnet Smith', 'Opus Dei', 'Haiku Tanaka',
-    'Fable Lee', 'Gemini Wen', 'Trae Young', 'Cursor Smith']) {
+    'Fable Lee', 'Gemini Moreau', 'Trae Young', 'Cursor Smith']) {
     assert.deepEqual(modelKeyOf(name), { key: 'none', ai: 0 }, name);
   }
 });

@@ -16,9 +16,9 @@ const RULES = {
     collab: 1,
   },
   // 按 commit 作者与共同作者（Co-Authored-By）的名字识别模型，PR 分乘以 weight。
-  // 名字去掉括号部分后整体比对，括号里的内容单独比对，例如「Claude Opus 5.5 (1M context)」「某人 (Claude Opus 5.5)」。
+  // 名字去掉括号部分后整体比对，括号里的内容单独比对，例如「Claude Opus 5.5 (1M context)」「Alex Chen (Claude Opus 5.5)」。
   // Claude、Gemini、TRAE 和型号词也会出现在人名里，这几档只认完整的 AI 署名：Claude 型号要带「Claude」前缀或版本号，
-  // 「Claude Dupont」「Gemini Wen」这类人名不算。
+  // 「Claude Dupont」「Gemini Moreau」这类人名不算。
   // 系数按组织偏好整体定档，不区分版本：Claude 强于 GPT；DeepSeek 胜在速度、Gemini 胜在成本，系数低于前两家。
   // 没有署名的 PR 绝大多数也由 agent 编写，署名与否主要取决于工具配置，所以各档与「无 AI 标注」只拉开小幅差距。
   // 同一个署名按列表顺序取第一个匹配，所以扣分工具与更具体的代号排在前面。
