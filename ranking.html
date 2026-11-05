@@ -188,8 +188,6 @@
   .fx-week { margin-top: var(--s-5); padding-top: var(--s-5); border-top: 1px solid var(--line-soft); }
   .fx-blocks { display: flex; flex-wrap: wrap; gap: 3px; margin: 10px 0 8px; min-height: 14px; }
   .fx-blocks i { width: 14px; height: 14px; border-radius: 3px; background: var(--leaf); transition: background-color var(--dur-2), transform var(--dur-3) var(--ease-spring); }
-  .fx-blocks i.over { background: var(--viz-dim); }
-  .fx-blocks i.cut { width: 1px; margin: 0 4px; background: var(--ink-3); border-radius: 0; }
   .fx-week p { font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.6; font-variant-numeric: tabular-nums; }
   .fx-week p b { color: var(--ink); font-weight: 650; }
 
@@ -349,7 +347,7 @@
             <div class="fx-ctl"><div class="hd"><span>署名的模型</span><small id="fxModelNote"></small></div><div class="fx-models" id="fxModels" role="radiogroup" aria-label="署名的模型"></div></div>
           </div>
           <div class="fx-out" aria-live="polite">
-            <div><div class="label">这个 PR 得</div><div class="fx-big"><span id="fxScore" class="num"></span><small>魔力</small></div></div>
+            <div><div class="label">这个 PR 原始分</div><div class="fx-big"><span id="fxScore" class="num"></span><small>分</small></div></div>
             <div class="fx-bars" id="fxBars"></div>
             <div class="fx-eq" id="fxEq"></div>
             <div class="fx-eq" id="fxRef" style="padding-top:10px;border-top:1px solid var(--line-soft)"></div>
@@ -936,12 +934,12 @@
 
   // ═════════════════ 公式：单个 PR 计算器 ═════════════════
   (function formula() {
-    const S = N.RULES.score, CAP = N.RULES.weeklyActionCap;
+    const S = N.RULES.score, CAPS = N.RULES.weeklyScoreCaps;
     const models = N.summary.models.slice().sort((a, b) => b.weight - a.weight || b.count - a.count);
     const topM = models[0];
-    $('#fxMain').innerHTML = `<span class="lhs">魔力</span><span>=</span><span class="sig"><b>Σ</b><small>每周</small></span>`
-      + `<span class="tm" data-tip="每周最多按 ${CAP} 个动作计分，超出按比例折算">min(1, ${CAP} ÷ 动作数)</span><span>×</span>`
-      + `<span class="nowrap" style="display:inline-flex;align-items:center;gap:8px"><span class="sig"><b>Σ</b><small>当周</small></span><span class="par">(</span><span class="tm" data-tip="(1 + ${S.lines}·log₁₀(1 + 改动行) + ${S.commits}·log₂(1 + commit 数)) × 模型系数"><span class="key" style="--k:var(--series-pr)">PR 分</span></span><span>+</span><span class="tm" data-tip="每参与一个他人的 PR / issue，或自己提的有效 issue"><span class="key" style="--k:var(--series-collab)">协作 ×${S.collab}</span></span><span class="par">)</span></span>`;
+    $('#fxMain').innerHTML = `<span class="lhs">魔力</span><span>=</span><span class="sig"><b>Σ</b><small>每周</small></span><span class="par">(</span>`
+      + `<span class="tm" data-tip="P 是当周含模型加成的 PR 原始分">${CAPS.pr}P ÷ (${CAPS.pr} + P)</span><span>+</span>`
+      + `<span class="tm" data-tip="C 是当周协作次数乘以每次协作分">${CAPS.collab}C ÷ (${CAPS.collab} + C)</span><span class="par">)</span>`;
     let m = models.findIndex((x) => x === topM);
     $('#fxModels').innerHTML = models.map((x, k) => `<button type="button" class="chip ${x.weight < 1 ? 'neg' : ''}" role="radio" data-k="${k}" aria-pressed="${k === m}" aria-checked="${k === m}" data-tip="组织里有 ${fmt.int(x.count)} 个合入 PR 是这个署名"><span class="chk">${icon('check', 13)}</span>${esc(x.label)} <b>×${x.weight}</b></button>`).join('');
     const L = $('#fxLines'), C = $('#fxCommits'), Nn = $('#fxN');
@@ -968,19 +966,18 @@
         + bar('改动行', 1, 1 + a, '', `${S.lines} × log₁₀(1 + ${lines})`)
         + bar('commit', 1 + a, raw, '', `${S.commits} × log₂(1 + ${commits})`)
         + bar('模型', raw, score, `m ${dm < 0 ? 'neg' : ''}`, `× ${M.weight}（${M.label}）${dm < 0 ? '，低于 1 时按扣分计' : ''}`);
-      $('#fxEq').innerHTML = `相当于 <b>${mag(score / S.collab)}</b> 次协作。改动行和 commit 都按对数加分：行数翻 10 倍只多 ${S.lines}，commit 翻倍只多 ${S.commits}。`;
-      const n = +Nn.value, k = Math.min(1, CAP / n), wkScore = n * score * k;
+      $('#fxEq').innerHTML = `原始 PR 分相当于 <b>${mag(score / S.collab)}</b> 次协作原始分。改动行和 commit 都按对数加分：行数翻 10 倍只多 ${S.lines}，commit 翻倍只多 ${S.commits}。`;
+      const n = +Nn.value;
+      const week = weeklyScore(n * raw, n * dm, 0, N.RULES);
+      const wkScore = week.bonus;
       $('#fxNV').textContent = n;
-      $('#fxCapNote').textContent = n > CAP ? `超过 ${CAP} 个，按 ${CAP}/${n} 折算` : `未超过 ${CAP} 个，不折算`;
-      $('#fxBlocks').innerHTML = Array.from({ length: n }, (_, i) => (i === CAP ? '<i class="cut"></i>' : '') + `<i class="${i >= CAP ? 'over' : ''}"></i>`).join('');
-      $('#fxWeek').innerHTML = n > CAP
-        ? `当周得分 = ${n} × ${mag(score)} × ${CAP}/${n} = <b>${mag(wkScore)}</b>。多出来的 ${n - CAP} 个不白干，但整周被摊薄，等于只算 ${CAP} 个。`
-        : `当周得分 = ${n} × ${mag(score)} = <b>${mag(wkScore)}</b>。再多 ${CAP - n + 1} 个动作（含协作）就开始按比例折算。`;
+      $('#fxCapNote').textContent = `PR 递减额度 ${CAPS.pr}；协作另有 ${CAPS.collab} 的递减额度`;
+      $('#fxBlocks').innerHTML = Array.from({ length: n }, () => '<i></i>').join('');
+      $('#fxWeek').innerHTML = `当周 PR 原始分 ${mag(n * score)}，按 ${CAPS.pr}P/(${CAPS.pr}+P) 得 <b>${mag(week.pr + week.model)}</b>；协作得 <b>${mag(week.collab)}</b>，合计 <b>${mag(wkScore)}</b>。PR 越多仍会增加得分，但单个新增 PR 的增量会变小。`;
     }
     const sPR = PEOPLE.reduce((a, p) => a + p.bonusPr + p.bonusModel, 0), sM = PEOPLE.reduce((a, p) => a + p.merged, 0);
-    const minW = Math.min(...models.map((x) => x.weight)), avgPR = sPR / sM;
-    $('#fxRef').innerHTML = `对照：组织里 ${fmt.int(sM)} 个合入 PR 平均每个实得 <b>${mag(avgPR)}</b>`
-      + (avgPR < minW ? `，比单个 PR 的最低分 ${mag(minW)}（1 × 最低系数 ×${minW}）还低：一周合入远超 ${CAP} 个的人，被封顶摊薄了。` : '。');
+    const avgPR = sPR / sM;
+    $('#fxRef').innerHTML = `对照：组织里 ${fmt.int(sM)} 个合入 PR 平均每个累计折算 <b>${mag(avgPR)}</b> 魔力；PR 与协作分开递减，不会因另一项贡献增加而被稀释。`;
     [L, C, Nn].forEach((el) => el.addEventListener('input', calc));
     const chipsM = () => [...$('#fxModels').querySelectorAll('.chip')];
     const syncTab = () => chipsM().forEach((x, k) => x.tabIndex = k === m ? 0 : -1);
@@ -1008,8 +1005,8 @@
       <div class="gl-sec"><div class="label">形态 · 只看魔力，不降级</div><div class="gl-ladder">${ladder}</div>
         <p class="footnote" style="margin-top:10px">${icon('egg', 13)}<span>首次贡献起 ${R.newbie.days} 天内合入 ≥ ${R.newbie.merged} 且活跃周 ≥ ${R.newbie.activeWeeks} 即孵化，或魔力 ≥ ${R.hatchBonus} 直接孵化。考核期内叫<b class="strong">蛙卵</b>（${N.summary.pending} 人），期满未达标叫<b class="strong">未孵化</b>（${N.summary.failed} 人）。</span></p></div>
       <div class="gl-sec"><dl class="gl-dl">
-        <dt>魔力</dt><dd>合入 PR 分（已乘模型系数）加协作分，按周累计。每周最多按 ${R.weeklyActionCap} 个动作计分，超出按比例折算。</dd>
-        <dt>协作</dt><dd>参与别人的 PR 或 issue：review、评论、帮人合入。同一个只算一次；自己提的有效 issue 也算。每次 +${R.score.collab}。</dd>
+        <dt>魔力</dt><dd>合入 PR 分（已乘模型系数）与协作分按周累计；当周 PR 原始分 P 按 ${R.weeklyScoreCaps.pr}P/(${R.weeklyScoreCaps.pr}+P) 递减，协作分 C 按 ${R.weeklyScoreCaps.collab}C/(${R.weeklyScoreCaps.collab}+C) 递减，两者分别计分。</dd>
+        <dt>协作</dt><dd>参与别人的 PR 或 issue：review、评论、帮人合入。同一个只算一次；自己提的有效 issue 也算。每次贡献原始分 +${R.score.collab}，再按当周协作总量递减计入魔力。</dd>
         <dt>活跃周</dt><dd>有合入或协作的不同自然周（周一 0 点起，UTC+8）。</dd>
         <dt>合入率</dt><dd>合入 ÷ 已收尾。已收尾 = 合入 + 被他人关闭 + 打开超 ${R.staleOpenDays} 天未合；自己关闭的算撤回，不计入。</dd>
         <dt><span class="tag tag-warn">${icon('alert-triangle', 11)}合入率警告</span></dt><dd>已收尾越多，警告线越高。只提醒，不扣魔力，也不影响形态。<div class="gl-warn">${wl}</div></dd>

@@ -33,6 +33,8 @@ token 权限：
 
 计分规则在 `engine.js` 的 `RULES`。页面有六个：`index.html`（本周）、`ranking.html`、`profile.html`、`hatchery.html`、`pond.html`、`rules.html`，共用 `assets/` 下的设计系统。改动通过 PR 合入 `main` 后，下次运行上传脚本时随数据一起发布。
 
+每周 PR 原始分（含模型系数）与协作原始分分别递减计分，上限取 `RULES.weeklyScoreCaps`，两项互不稀释。上传脚本会按当前规则重算历史各周，因此规则调整也可能改变累计魔力、排名和形态。
+
 ## 本地预览与测试
 
 ```bash
@@ -42,10 +44,11 @@ node scripts/serve.mjs              # http://127.0.0.1:8080/
 
 `serve.mjs` 依次取 `BOARD_FILE`、`data/board.json`、`dist/board.json` 作为页面数据。
 
-端到端测试用脱敏的 `tests/fixtures/board.json`，不读取组织数据：
+`npm test` 用合成数据验证计分行为，无需安装依赖。端到端测试用脱敏的 `tests/fixtures/board.json`，不读取组织数据：
 
 ```bash
 npm ci
+npm test
 npx playwright install chromium
 npm run test:e2e
 ```
@@ -54,7 +57,7 @@ npm run test:e2e
 
 ## CI
 
-CI checks the scoring engine, upload script and page script syntax, and runs
+CI checks the scoring engine, upload script and page script syntax, runs scoring behavior tests, and runs
 the Playwright end-to-end tests against the anonymized fixture, without reading
 or publishing organization data. `CI_LINUX_RUNNER` selects the HomeLab executor
 only for trusted default-branch runs. Pull requests use hosted runners.

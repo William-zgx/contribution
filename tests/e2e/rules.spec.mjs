@@ -41,3 +41,49 @@ test('合入率散点每个有已收尾 PR 的人一个点，点击进入档案'
   await dots.last().click();
   await expect(page).toHaveURL(new RegExp(`profile\\.html.*#u=${login}`));
 });
+
+test('新公式页显示独立的 PR 与协作递减曲线', async ({ page }) => {
+  await open(page, '/rules.html');
+  const formula = page.locator('#formulaCard');
+  await expect(formula).toContainText('30P ÷ (30 + P)');
+  await expect(formula).toContainText('10C ÷ (10 + C)');
+  await expect(formula).toContainText('10×3/(10+3) = 2.3');
+  await expect(formula).toContainText('原始 PR 分');
+});
+
+test('排行榜 PR 计算器随 PR 数增加而单调增加', async ({ page }) => {
+  await open(page, '/ranking.html');
+  const setN = async (value) => page.evaluate((v) => {
+    const el = document.querySelector('#fxN');
+    el.value = String(v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+  const total = async () => Number((await page.locator('#fxWeek b').last().textContent()).replace(',', ''));
+  await setN(1);
+  const one = await total();
+  await setN(24);
+  const many = await total();
+  expect(many).toBeGreaterThan(one);
+  await expect(page.locator('#fxCapNote')).toContainText('PR 递减额度 30');
+  await expect(page.locator('#fxCapNote')).toContainText('协作另有 10');
+});
+
+test('排行榜计算器按已知 PR 输入得到递减后的数值', async ({ page }) => {
+  await open(page, '/ranking.html');
+  const setValue = async (selector, value) => page.evaluate(([s, v]) => {
+    const el = document.querySelector(s);
+    el.value = String(v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [selector, value]);
+  await setValue('#fxLines', 0);
+  await setValue('#fxCommits', 1);
+  await page.locator('#fxModels .chip').filter({ hasText: 'Claude Opus' }).click();
+  await setValue('#fxN', 10);
+  const values = await page.locator('#fxWeek b').allTextContents();
+  const prScore = Number(values[0].replace(',', '.'));
+  const total = Number(values.at(-1).replace(',', '.'));
+  // 每个 PR 的原始分为 (1 + 0.15·log₂2)×1.3 = 1.495；
+  // 10 个 PR 的 P=14.95，30P/(30+P)≈9.98，页面显示 10.0。
+  expect(prScore).toBeCloseTo(10, 1);
+  expect(total).toBeCloseTo(10, 1);
+});

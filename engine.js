@@ -6,8 +6,8 @@
 const RULES = {
   // 周的切分时区（UTC+8，周一 00:00 开始）
   tzOffsetHours: 8,
-  // 每周最多按这么多个动作计分，超出按比例折算，对应 M-Team「做种数最多计 N 个」
-  weeklyActionCap: 10,
+  // PR（含模型系数）与协作分别递减计分，单周得分趋近各自上限。
+  weeklyScoreCaps: { pr: 30, collab: 10 },
   score: {
     // 单个合入 PR：1 + lines × log10(1 + 改动行) + commits × log2(1 + commit 数)，再乘模型系数
     lines: 0.25,
@@ -119,6 +119,19 @@ function prRawScore(lines, commits, rules) {
   return 1 + rules.score.lines * Math.log10(1 + lines) + rules.score.commits * Math.log2(1 + commits);
 }
 
+// 输入为当周原始分；PR 与模型加减使用同一系数，保留页面的分项展示。
+function weeklyScore(pr, model, collab, rules = RULES) {
+  const caps = rules.weeklyScoreCaps;
+  const k = caps.pr / (caps.pr + pr + model);
+  const result = {
+    pr: k * pr,
+    model: k * model,
+    collab: caps.collab * collab / (caps.collab + collab),
+  };
+  result.bonus = result.pr + result.model + result.collab;
+  return result;
+}
+
 function modelOf(text, rules) {
   return rules.models.find((x) => x.pattern.test(text)) || rules.modelNone;
 }
@@ -141,7 +154,6 @@ function detectModel(pr, rules) {
 // 节点字段与页面 GraphQL 查询一致。返回值只依赖 data、rules、now。
 function computeBoard(data, rules, now) {
   const tz = rules.tzOffsetHours;
-  const cap = rules.weeklyActionCap;
   const ignore = new Set(rules.ignoreLogins);
   const members = new Set(data.members);
   const people = new Map();
@@ -255,26 +267,25 @@ function computeBoard(data, rules, now) {
       weekActive.get(w).add(p.login);
     }
 
-    // 截至 t 的魔力：逐周汇总，动作数超过 cap 的周按 cap / 动作数 折算
+    // 截至 t 的魔力：逐周汇总后，PR 与协作分别递减计分。
     const scoreAt = (t) => {
       const weeks = new Map();
       for (const a of acts) {
         if (a.t > t) break;
         const w = weekStart(a.t, tz);
         let s = weeks.get(w);
-        if (!s) weeks.set(w, (s = { n: 0, pr: 0, model: 0, collab: 0 }));
-        s.n++;
+        if (!s) weeks.set(w, (s = { pr: 0, model: 0, collab: 0 }));
         s.pr += a.pr;
         s.model += a.model;
         s.collab += a.collab;
       }
       const total = { pr: 0, model: 0, collab: 0, bonus: 0, weekly: new Map() };
       for (const [w, s] of weeks) {
-        const k = Math.min(1, cap / s.n);
-        total.pr += k * s.pr;
-        total.model += k * s.model;
-        total.collab += k * s.collab;
-        total.weekly.set(w, k * (s.pr + s.model + s.collab));
+        const score = weeklyScore(s.pr, s.model, s.collab, rules);
+        total.pr += score.pr;
+        total.model += score.model;
+        total.collab += score.collab;
+        total.weekly.set(w, score.bonus);
       }
       total.bonus = total.pr + total.model + total.collab;
       return total;

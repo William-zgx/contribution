@@ -510,7 +510,7 @@
         <div><span class="key" style="--k:var(--series-model)">模型加成</span><div class="cv ${neg ? 'neg' : ''}">${neg ? '−' : '+'}${mag(Math.abs(p.bonusModel))}</div><div class="cd">${ai ? `<b>${fmt.int(ai)}</b> 个 PR 有 AI 署名${neg ? `；${esc(cut.join('、'))} 系数低于 1，扣分已从 PR 分里减掉` : '，按模型系数加分'}` : '没有带 AI 署名的 PR'}</div></div>
         <div><span class="key" style="--k:var(--series-collab)">协作</span><div class="cv">${mag(p.bonusCollab)}</div><div class="cd">参与他人 PR / issue 与自提有效 issue 共 <b>${fmt.int(p.collab)}</b> 次${p.issuesFiled ? `，其中自提 issue <b>${fmt.int(p.issuesFiled)}</b> 个` : ''}</div></div>
       </div>`}
-      <p class="pf-note">${empty ? '还没有魔力：合入第一个 PR 或参与一次协作后就会出现。' : `每个合入 PR 得 1 + 0.25·log₁₀(1+改动行) + 0.15·log₂(1+commit 数)，再乘模型系数；协作每次 +1。每周最多按 ${R.weeklyActionCap} 个动作计分，超出按比例折算，所以分数比动作数少。`}</p>
+      <p class="pf-note">${empty ? '还没有魔力：合入第一个 PR 或参与一次协作后就会出现。' : `每个合入 PR 的原始分为 1 + ${R.score.lines}·log₁₀(1+改动行) + ${R.score.commits}·log₂(1+commit 数)，再乘模型系数；每周 PR 原始分按 ${R.weeklyScoreCaps.pr}P/(${R.weeklyScoreCaps.pr}+P) 递减，协作按 ${R.weeklyScoreCaps.collab}C/(${R.weeklyScoreCaps.collab}+C) 递减（P 为当周含模型系数的 PR 原始总分，C 为协作次数 × ${R.score.collab}）。两项分别计分，贡献越多单次增量越小。`}</p>
     </section>`;
   }
 

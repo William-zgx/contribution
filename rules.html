@@ -355,7 +355,7 @@
 
   const R = window.RULES;
   const S = R.score;
-  const CAP = R.weeklyActionCap;
+  const CAPS = R.weeklyScoreCaps;
   const SUM = NW.summary;
   const LIM = NW.B.limits || {};
   const PEOPLE = NW.people;
@@ -371,7 +371,7 @@
     const [first, ...rest] = R.warnLines;
     const a = R.newbie.anomaly;
     return {
-      collab: { name: '协作', text: `参与别人的 PR 或 issue：review、评论、帮人合入。同一个 PR 或 issue 只算一次；自己提的有效 issue 也算。每次 +${R.score.collab} 魔力。` },
+      collab: { name: '协作', text: `参与别人的 PR 或 issue：review、评论、帮人合入。同一个 PR 或 issue 只算一次；自己提的有效 issue 也算。每次贡献原始分 +${R.score.collab}，再按当周协作总量递减计入魔力。` },
       rate: { name: '合入率', text: `合入 PR ÷ 已收尾 PR。已收尾指已合入、被别人关闭，或打开超过 ${R.staleOpenDays} 天还没合入。自己关闭的 PR 视为撤回，不计入。` },
       warn: { name: '合入率警告', tag: 'tag tag-warn', icon: 'alert-triangle', text: `已收尾 PR 超过 ${first.resolved} 个后，合入率低于 ${pct(first.rate)} 就会被标记；超过 ${rest.map((l) => l.resolved).join(' / ')} 个时，要求依次提高到 ${rest.map((l) => pct(l.rate)).join(' / ')}。只是提醒，不扣魔力，也不影响形态。` },
       outsider: { name: '组织外', tag: 'tag tag-out', text: '数据更新时不在 nwverse 组织成员名单里的账号，例如从 fork 提 PR 的外部贡献者、已退出的人。贡献照常计分。' },
@@ -438,7 +438,7 @@
   const wMax = Math.max(...allModels.map((m) => m.weight));
   const wMin = Math.min(...allModels.map((m) => m.weight));
   const resolvedPeople = PEOPLE.filter((p) => p.resolved > 0);
-  $('#lede').innerHTML = `合入 PR 按改动行、commit 数和署名的模型计分，协作每次 <span class="n">+${S.collab}</span>，每周最多计 <span class="n">${CAP}</span> 个动作。`
+  $('#lede').innerHTML = `合入 PR 按改动行、commit 数和署名的模型计分，协作每次原始分 <span class="n">+${S.collab}</span>；PR 与协作每周分别按递减曲线计分，分别趋近 ${CAPS.pr} / ${CAPS.collab} 分；新增贡献不会稀释另一项得分。`
     + `下面的图表和明细都由当前数据快照里 <span class="n">${K.fmt.int(SUM.contributors)}</span> 位贡献者、<span class="n">${K.fmt.int(SUM.merged)}</span> 个合入 PR 算出，规则改了这一页会跟着变。`;
   $('#dateline').innerHTML = `<span class="asof">数据快照 ${K.fmt.datetime(NW.now)}（UTC+8）</span>`;
   $('#introStats').innerHTML = [
@@ -493,28 +493,28 @@
     const top = R.models.reduce((m, x) => (x.weight > m.weight ? x : m));
     const penalties = R.models.filter((m) => m.weight < 1).map((m) => `${esc(m.label)} ×${m.weight}`).join('、');
     const ex2 = { merged: 12, collab: 3 };
-    const ex2n = ex2.merged + ex2.collab;
+    const ex2C = ex2.collab * S.collab;
+    const ex2CollabScore = weeklyScore(0, 0, ex2C, R).collab;
     $('#formulaCard').innerHTML = `
-      <div class="fx-main" role="img" aria-label="魔力等于每周的 min(1, ${CAP} 除以动作数) 乘以当周动作分之和，再对所有周求和">
+      <div class="fx-main" role="img" aria-label="魔力等于每周 PR 递减分与协作递减分之和，再对所有周求和">
         <span class="lhs">魔力</span><span>=</span>
         <span class="sig"><b>Σ</b><small>每周</small></span>
-        <span class="tm">min(1, ${CAP} ÷ 动作数)</span><span>×</span>
-        <span class="sig"><b>Σ</b><small>当周</small></span>
-        <span class="tm">动作分</span>
+        <span class="par">(</span><span class="tm">${CAPS.pr}P ÷ (${CAPS.pr} + P)</span><span>+</span>
+        <span class="tm">${CAPS.collab}C ÷ (${CAPS.collab} + C)</span><span class="par">)</span>
       </div>
       <dl class="fdefs">
         <dt><span class="key" style="--k:var(--series-pr)">PR 分</span></dt>
-        <dd><span class="nw">(1 + <span class="k">${S.lines}</span>·log₁₀(1+改动行)</span> <span class="nw">+ <span class="k">${S.commits}</span>·log₂(1+commit 数))</span> <span class="nw">× 模型系数</span></dd>
+        <dd><span class="nw">P = Σ[(1 + <span class="k">${S.lines}</span>·log₁₀(1+改动行)</span> <span class="nw">+ <span class="k">${S.commits}</span>·log₂(1+commit 数))</span> <span class="nw">× 模型系数]</span><span class="fn">当周所有已合入 PR 的原始分相加，P 越大仍会增加得分，但单个新增 PR 的增量会变小</span></dd>
         <dt><span class="key" style="--k:var(--series-collab)">协作分</span></dt>
-        <dd><span class="k">${S.collab}</span><span class="fn">每参与一个他人的 PR 或 issue（review、评论、代合入），或提一个有效 issue</span></dd>
+        <dd><span class="nw">C = 协作次数 × ${S.collab}</span><span class="fn">每参与一个他人的 PR 或 issue（review、评论、代合入），或提一个有效 issue；C 越大仍会增加得分，但单次增量会变小</span></dd>
         <dt><span class="key" style="--k:var(--series-model)">模型系数</span></dt>
         <dd>按署名的模型查表，最高 ${esc(top.label)} <span class="k">×${top.weight}</span><span class="fn">一个 PR 用了多个模型时取最高；带扣分工具署名时按扣分计（${penalties}）</span></dd>
       </dl>
       <dl class="examples">
         <dt>例 1</dt>
-        <dd>改 ${ex.lines} 行、${ex.commits} 个 commit、${esc(ex.model.label)} 的 PR：<span class="nw">(1 + ${exLines.toFixed(2)} + ${exCommits.toFixed(2)}) × ${ex.model.weight.toFixed(2)} = <b>${K.mag(exScore)}</b> 魔力</span></dd>
+        <dd>改 ${ex.lines} 行、${ex.commits} 个 commit、${esc(ex.model.label)} 的 PR：<span class="nw">(1 + ${exLines.toFixed(2)} + ${exCommits.toFixed(2)}) × ${ex.model.weight.toFixed(2)} = <b>${K.mag(exScore)}</b> 原始 PR 分</span></dd>
         <dt>例 2</dt>
-        <dd>一周合入 ${ex2.merged} 个 PR、协作 ${ex2.collab} 次，共 ${ex2n} 个动作：<span class="nw">当周得分 × ${CAP}/${ex2n}</span></dd>
+        <dd>一周合入 ${ex2.merged} 个 PR、协作 ${ex2.collab} 次：协作分为 <span class="nw">${CAPS.collab}×${ex2C}/(${CAPS.collab}+${ex2C}) = <b>${K.mag(ex2CollabScore)}</b></span>，PR 分按当周 P 代入 <span class="nw">${CAPS.pr}P/(${CAPS.pr}+P)</span>。</dd>
       </dl>
       <p class="footnote">${K.icon('info', 13, 'ic')}<span>各模型的系数见<a href="#factors" data-goto="factors">「计分因子」</a>。想拖动滑块试算，去<a href="ranking.html" data-screen="c2">排行榜</a>底部的公式卡。</span></p>`;
     $('#formulaCard').addEventListener('click', (e) => {
@@ -710,7 +710,7 @@
       ['上传量', 'PR 分', '合入 PR 按改动行、commit 数（对数压缩）和模型系数计分。'],
       ['下载量', '不考核', 'GitHub 上 review 和评论极少，考核协作会误伤大多数人；协作只计入魔力。', true],
       ['分享率', '合入率', '「给出 ÷ 收到 review」对所有人都是 0/0。合入率看 PR 是否收尾，作用接近 H&R。'],
-      ['做种魔力', `魔力（每周最多计 ${R.weeklyActionCap} 个动作）`, '只能靠持续活跃累积，单周集中刷 PR 收益有限。'],
+      ['做种魔力', `魔力（PR 与协作分别按递减曲线）`, '贡献越多仍会增加得分，但单次增量变小；两类贡献互不稀释。'],
       ['新手考核', `${R.newbie.days} 天孵化期`, `合入 PR ≥ ${R.newbie.merged}，活跃周 ≥ ${R.newbie.activeWeeks}。只考一次，没有月考、季考；没通过的人魔力达到 ${R.levels[1].bonus} 也直接孵化。`],
       ['等级与降级线', '奶蛙进化（只看魔力）', 'M-Team 升级同时看注册时间、上传量和分享率；这里只看魔力，不设降级线，合入率只用于警告。'],
       ['分享率警告期', '合入率警告线', '已收尾 PR 越多，合入率要求越高。'],

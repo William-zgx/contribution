@@ -688,7 +688,7 @@
       }).join('');
     };
     if (animate) K.flip(board, paint, { stagger: 12 }); else paint();
-    $('#boardFoot').textContent = f.s.top.length > 10 ? `还有 ${f.s.top.length - 10} 人获得魔力` : f.s.top.length ? `获得魔力的全部 ${f.s.top.length} 人` : '每人每周最多按 10 个动作计分';
+    $('#boardFoot').textContent = f.s.top.length > 10 ? `还有 ${f.s.top.length - 10} 人获得魔力` : f.s.top.length ? `获得魔力的全部 ${f.s.top.length} 人` : '每周 PR 与协作分别按递减曲线计分';
     paintBoardMore();
   }
   board.addEventListener('click', (e) => {
@@ -875,7 +875,7 @@
     chartM.update({ hi: i, valueLabel: NW.weeks[i].merged > 0 });
     $('#peopleEyebrow').textContent = f.live ? `本周 · ${K.week.range(i)}` : `${K.week.name(i)} · ${K.week.range(i)}`;
     const note = i === LAST ? K.week.note(i) : i === 0 ? '这是有记录的第一周，没有可对比的前一周。' : `「较前一周」对比的是 ${K.week.short(i - 1)} 那一周全周。`;
-    $('#heroNote').innerHTML = `${icon('info', 13)}<span>${note}活跃 = 提 PR、合入或协作的人；魔力每人每周最多按 10 个动作计分。</span>`;
+    $('#heroNote').innerHTML = `${icon('info', 13)}<span>${note}活跃 = 提 PR、合入或协作的人；PR 与协作分别计分，贡献越多单次增量越小。</span>`;
     if (!first) K.week.toURL(i);
     if (first) renderPanels(false, false);
     else if (quiet) settle();

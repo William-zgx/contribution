@@ -12,7 +12,7 @@ window.RULES = window.RULES || RULES;
   const R = window.RULES;
   const LV = R.levels.map((l, i) => ({ i, name: l.name, icon: l.icon, bonus: l.bonus, tagline: l.tagline }));
   const RULES = {
-    weeklyActionCap: R.weeklyActionCap,
+    weeklyScoreCaps: R.weeklyScoreCaps,
     score: R.score,
     newbie: R.newbie,
     hatchBonus: LV[1].bonus,
@@ -40,7 +40,7 @@ window.RULES = window.RULES || RULES;
   const people = B.people;
 
   for (const p of people) {
-    p.wk = new Map(p.weekly); // weekStart → 当周魔力（已按每周 10 个动作折算）
+    p.wk = new Map(p.weekly); // weekStart → 当周魔力（PR 与协作分别按递减曲线计算）
     // 每周末累计魔力；魔力 = 各周得分之和，所以任意一周的历史魔力都能精确还原
     let s = 0;
     p.cum = W.map((w) => (s += p.wk.get(w) || 0));
