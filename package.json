@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test tests/engine.test.mjs",
     "serve": "node scripts/serve.mjs",
+    "test:engine": "node --test tests/engine.test.mjs",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
