@@ -30,6 +30,12 @@
   .lb-empty.on { display: block; }
   .reopen { display: none; }
   .reopen.on { display: inline-flex; animation: swap-in var(--dur-4) var(--ease-out) both; }
+  .pf-top-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .pf-top-act .callout { padding: 6px 10px; font-size: var(--fs-xs); }
+  .pf-me-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.5; }
+  .pf-me-row > .ic { color: var(--leaf-ink); flex: none; }
+  .pf-me-row > span { flex: 1; min-width: 200px; }
+  .pf-me-row code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
   @media (max-width: 1100px) {
     .lb { --cols: 28px 40px minmax(140px, 1.3fr) 160px 64px 96px; }
     .lb .c-comp { display: none; }
@@ -245,8 +251,8 @@
 <main class="page">
   <section class="section">
     <div class="sec-h">
-      <div><span class="eyebrow">档案</span><h2>我离下一级还差什么</h2><p>点排行榜里任何一个人，打开档案<span class="only-kbd">；<kbd>←</kbd> <kbd>→</kbd> 换人，<kbd>esc</kbd> 关闭</span></p></div>
-      <button type="button" class="btn reopen" id="reopen"></button>
+      <div><span class="eyebrow">档案</span><h2>贡献者档案</h2><p>魔力、形态、离下一级还差什么。点排行榜里任何一个人打开档案<span class="only-kbd">；<kbd>←</kbd> <kbd>→</kbd> 换人，<kbd>esc</kbd> 关闭</span></p></div>
+      <div class="pf-top-act"><span id="pfMe"></span><button type="button" class="btn reopen" id="reopen"></button></div>
     </div>
     <div class="card card-flush">
       <div class="lb-bar">
@@ -269,7 +275,7 @@
   const K = NWK, fmt = K.fmt, mag = K.mag, esc = K.esc, icon = K.icon;
   const W = NW.W, LAST = NW.last, DAY = NW.DAY, R = NW.RULES, LV = NW.LV;
   const PEOPLE = NW.people; // 已按名次排序
-  const DEFAULT = PEOPLE.length ? PEOPLE[0].login : ''; // 没带 #u= 时打开总榜第一名
+  const DEFAULT = PEOPLE.length ? PEOPLE[0].login : ''; // 「没有找到」时给一个能看的档案（总榜第一名）
   const $ = (s, r = document) => r.querySelector(s);
   const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
@@ -313,7 +319,7 @@
       : `<div class="fm">${K.frogOf(p, 20)}<div style="min-width:0"><div class="fn">${fo.name}<span>魔力 ${mag(p.bonus)}/50</span></div><div class="meter yolk"><i style="width:${(p.progress * 100).toFixed(1)}%"></i></div></div></div>`;
     const tags = `${p.member ? '' : '<span class="tag tag-out">组织外</span>'}${p.dormant ? `<span class="tag tag-sleep">${icon('moon-z', 11)}冬眠</span>` : ''}`;
     const sub = `合入 ${fmt.int(p.merged)} · 协作 ${fmt.int(p.collab)}${p.resolved ? ` · 合入率 ${fmt.pct(p.rate)}` : ''}`;
-    return `<div class="lrow is-click" role="option" tabindex="-1" aria-selected="false" data-login="${esc(p.login)}">`
+    return `<div class="lrow is-click ${K.me.is(p) ? 'is-me' : ''}" role="option" tabindex="-1" aria-selected="false" data-login="${esc(p.login)}">`
       + `<span class="rank ${p.rank <= 3 ? 'top' : ''} ${p.bonus <= 0.005 ? 'none' : ''}">${p.rank}</span><span>${deltaHTML(p)}</span>`
       + `<span style="min-width:0">${K.who(p, { size: 28, sub, tags })}</span><span class="c-form">${form}</span>`
       + `<span class="c-comp">${K.comp(p, { scale: p.bonus / maxB })}</span>`
@@ -395,6 +401,7 @@
     const b = document.getElementById('reopen');
     if (cur) { b.innerHTML = `${K.avatar(cur.login, 18)}<span>重新打开 ${esc(cur.login)} 的档案</span>`; b.classList.add('on'); }
     $('#pfPop', d.el).classList.remove('on');
+    renderPfMe();
     // 抽屉里 ←/→ 换过人时，焦点落在当前这个人的行上，而不是最初打开抽屉的那一行（否则会出现两行同时高亮）
     const r = cur && rowOf(cur.login);
     if (r && !r.hidden && document.activeElement && document.activeElement.closest && document.activeElement.closest('.lrow') && document.activeElement !== r) r.focus({ preventScroll: true });
@@ -426,9 +433,12 @@
     document.getElementById('reopen').classList.remove('on');
     if (open || !d.isOpen()) d.open(trigger && trigger.isConnected ? trigger : (cur && rowOf(cur.login)) || undefined);
     trigger = null;
+    renderPfMe();
   }
 
   function renderMissing(login) {
+    cur = null;
+    rowsEl.querySelectorAll('.lrow.is-cur').forEach((r) => r.classList.remove('is-cur'));
     $('#pfPos', d.el).textContent = '';
     body.innerHTML = `<div class="pf-missing pf-swap">${K.empty({ art: 'egg', title: `没有找到「${login}」`, body: '只有有贡献记录的人才有档案。账号名要和 GitHub 上一致，可以用上面的搜索找一找。', action: `<button type="button" class="btn btn-sm" data-go="${esc(DEFAULT)}">${icon('arrow-right', 14)}看看 ${esc(DEFAULT)} 的档案</button>` })}</div>`;
     foot.innerHTML = '';
@@ -441,7 +451,7 @@
     const k = PEOPLE.indexOf(p);
     $('#pfPos', d.el).textContent = `第 ${k + 1} / ${PEOPLE.length} 位`;
     const f = K.formOf(p);
-    body.innerHTML = `<div class="pf-swap">${heroHTML(p, f)}${evoHTML(p)}${vitHTML(p)}${weeklyHTML(p)}${compHTML(p)}${rateHTML(p)}${modelHTML(p)}${newbieHTML(p, f)}${dormHTML(p)}</div>`;
+    body.innerHTML = `<div class="pf-swap">${heroHTML(p, f)}${meSecHTML(p)}${evoHTML(p)}${vitHTML(p)}${weeklyHTML(p)}${compHTML(p)}${rateHTML(p)}${modelHTML(p)}${newbieHTML(p, f)}${dormHTML(p)}</div>`;
     // 魔力数字从上一个人的值滚到这个人
     K.countUp(body.querySelector('#pfMag'), p.bonus, { from: fromMag ?? 0, format: mag, dur: fromMag === null ? 0 : 700 });
     mountWeekly(p);
@@ -456,6 +466,7 @@
 
   function heroHTML(p, f) {
     const tags = [p.member ? '<span class="tag tag-member">组织成员</span>' : '<span class="tag tag-out">组织外</span>', K.levelBadge(p, { pill: true })];
+    if (K.me.is(p)) tags.unshift(`<span class="tag tag-live me-tag">${icon('user', 11)}我 · 仅此浏览器记住</span>`);
     if (moveOf(p) === null) tags.push('<span class="tag tag-new">新面孔</span>');
     if (p.dormant) tags.push(`<span class="tag tag-sleep">${icon('moon-z', 11)}冬眠</span>`);
     const left = Math.max(0, Math.ceil(R.dormantDays - (NW.now - p.lastAt) / DAY));
@@ -476,6 +487,34 @@
       <div class="pf-strip">${cells.map((c) => `<div class="pf-cell"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="s">${c.s}</div></div>`).join('')}</div>
     </section>`;
   }
+
+  // ───────── 我：这个浏览器记住的账号 ─────────
+  // 看别人的档案时提供「记为我的账号」与「返回我的档案」；看自己的档案时提供「不再记住」。只有明确点击才写入
+  function meSecHTML(p) {
+    const s = K.me.state();
+    if (K.me.is(p)) {
+      return `<section class="drawer-sec pf-me" aria-label="我的账号"><div class="pf-me-row">${icon('user', 15)}<span>这是你在这个浏览器记住的账号。链接 <code>profile.html#u=${esc(p.login)}</code> 任何人打开都是这份档案，不会改变对方的「我」。</span><button type="button" class="btn btn-sm btn-ghost" data-action="me-forget">${icon('log-out', 14)}不再记住</button></div></section>`;
+    }
+    const swap = s === 'set' ? `将替换当前记住的 @${esc(K.me.person.login)}` : s === 'missing' ? `将替换记住的 @${esc(K.me.pref.login)}（当前快照未找到）` : '记住后，首页和排行榜会直接显示你的名次';
+    return `<section class="drawer-sec pf-me" aria-label="记为我的账号"><div class="pf-me-row"><button type="button" class="btn btn-sm btn-primary" data-me-remember="${esc(p.login)}">${icon('check', 14)}记为我的账号</button><span>${swap}</span>${s === 'set' ? `<button type="button" class="btn btn-sm btn-ghost" data-action="me-go">${icon('arrow-left', 14)}返回我的档案</button>` : ''}</div></section>`;
+  }
+  body.addEventListener('click', (e) => { const b = e.target.closest('[data-me-remember]'); if (b) K.me.remember(b.dataset.meRemember); });
+  // 标题右侧的入口：未设置「找到我的档案」；已设置且没在看自己时「我的档案」；快照里没有时提示重新选择
+  function renderPfMe() {
+    const el = document.getElementById('pfMe'), s = K.me.state();
+    if (s === 'unset') el.innerHTML = `<button type="button" class="btn btn-sm" data-action="me-pick">${icon('user-plus', 14)}找到我的档案</button>`;
+    else if (s === 'missing') el.innerHTML = `<span class="callout">${icon('alert-triangle', 14)}<span>当前快照未找到你记住的 <b>@${esc(K.me.pref.login)}</b></span><button type="button" class="btn btn-sm" data-action="me-pick">重新选择</button><button type="button" class="btn btn-sm btn-ghost" data-action="me-forget">不再记住</button></span>`;
+    else el.innerHTML = d.isOpen() && cur === K.me.person ? '' : `<button type="button" class="btn btn-sm" data-action="me-go">${K.avatar(K.me.person.login, 18)}<span>我的档案</span></button>`;
+  }
+  K.me.subscribe(() => {
+    // 背景榜的「我」标记与底色
+    const q = document.getElementById('lbSearch').value.trim().toLowerCase();
+    rowsEl.innerHTML = PEOPLE.map(rowHTML).join('');
+    filterRows(q);
+    if (cur) { const r = rowOf(cur.login); if (r) r.classList.add('is-cur'); }
+    if (cur && d.isOpen()) show(cur.login, { keepScroll: true });
+    renderPfMe();
+  });
 
   // kit 的 evoAxis 在均速为 0 时会写成「按近 4 周均速 0.0/周，近 4 周没有新魔力」，这里去掉重复的前半句
   const evoAxisHTML = (p) => { const h = K.evoAxis(p); return p.pace > 0 ? h : h.replace(`按近 4 周均速 ${mag(0)}/周，`, ''); };
@@ -961,7 +1000,13 @@
   const fromHash = () => { const m = location.hash.match(/(?:^#|&)u=([^&]+)/); return m ? decodeURIComponent(m[1]) : null; };
   addEventListener('hashchange', () => { const l = fromHash(); if (l) show(l, { open: true }); else if (d.isOpen()) d.close(); });
   let booted = false;
-  K.ready(() => { show(fromHash() || DEFAULT, { open: true }); booted = true; });
+  K.ready(() => {
+    const h = fromHash();
+    if (h) show(h, { open: true });
+    else if (K.me.person) show(K.me.person.login, { open: true });
+    else renderPfMe();
+    booted = true;
+  });
 })();
 </script>
 </body>

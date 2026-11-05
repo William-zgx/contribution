@@ -99,9 +99,11 @@ test.describe('形态池', () => {
   });
 });
 
-test('档案页不带 #u= 时打开总榜第一名', async ({ page }) => {
+test('档案页不带 #u= 且没记住账号时停在落地页，不打开任何人', async ({ page }) => {
   await open(page, '/profile.html');
-  await expect(page.locator('.drawer.on #pfBody')).toContainText(BOARD.people[0].login);
+  await expect(page.locator('.drawer.on')).toHaveCount(0);
+  await expect(page.locator('#pfMe')).toContainText('找到我的档案');
+  await expect(page.locator('h2').first()).toContainText('贡献者档案');
 });
 
 // 活力：按 RULES.vitality 在测试里独立重算一遍，与页面对照

@@ -108,6 +108,9 @@
     pin: '<path d="M12 21.5s-6.5-6.2-6.5-11.3a6.5 6.5 0 0 1 13 0c0 5.1-6.5 11.3-6.5 11.3Z"/><circle cx="12" cy="10" r="2.4"/>',
     'book-open': '<path d="M12 6.5C10.3 5 7.9 4.5 3.5 4.5v14c4.4 0 6.8.5 8.5 2 1.7-1.5 4.1-2 8.5-2v-14c-4.4 0-6.8.5-8.5 2Z"/><path d="M12 6.5v14"/>',
     activity: '<path d="M21.5 12h-3.8l-2.8 8.5L9.1 3.5 6.3 12H2.5"/>',
+    repeat: '<path d="m17 2.5 4 4-4 4"/><path d="M3 11.5v-1a4 4 0 0 1 4-4h14"/><path d="m7 21.5-4-4 4-4"/><path d="M21 12.5v1a4 4 0 0 1-4 4H3"/>',
+    'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   };
   const icon = (name, size = 16, cls = '') => `<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${P[name] || ''}</svg>`;
   const TRI_UP = '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="M4 1 7.5 6.5h-7Z"/></svg>';
@@ -196,8 +199,9 @@
   function who(p, { size = 28, sub = '', tags = '', progress = false } = {}) {
     if (typeof p === 'string') p = NW.byLogin.get(p) || { login: p };
     const av = avatar(p.login, size, { dim: !!p.dormant, progress: progress ? p.progress : null, ring: p.level === null ? 'egg' : null });
+    const meTag = me.is(p.login) ? '<span class="tag tag-live me-tag">我</span>' : '';
     return `<span class="who" data-person="${esc(p.login)}" tabindex="0" role="button" aria-label="${esc(p.login)}，查看档案">${av}`
-      + `<span class="who-txt"><span class="l1"><span class="nm">${esc(p.login)}</span>${tags}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</span></span>`;
+      + `<span class="who-txt"><span class="l1"><span class="nm">${esc(p.login)}</span>${meTag}${tags}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</span></span>`;
   }
   // 正文里的人名：与正文同字号、同基线、同墨色
   const pname = (login, { avatar: withAv = true } = {}) => `<span class="pname" data-person="${esc(login)}" tabindex="0" role="button">${withAv ? avatar(login, 16) : ''}${esc(login)}</span>`;
@@ -548,7 +552,8 @@
   // 页面 id → 文件名（站点根目录下的静态页面）
   const PAGE_FILES = { c1: 'index.html', c2: 'ranking.html', c3: 'profile.html', c4: 'hatchery.html', c5: 'pond.html', rules: 'rules.html' };
   const pageFile = (id) => PAGE_FILES[id] || 'index.html';
-  const keepSearch = () => { const u = new URLSearchParams(location.search); u.delete('week'); const s = u.toString(); return s ? `?${s}` : ''; };
+  // 跨页只带公共显示参数（theme）；榜单的 win / flag、首页的 week 只属于本页，不带到别的页面
+  const keepSearch = () => { const t = new URLSearchParams(location.search).get('theme'); return t === 'light' || t === 'dark' ? `?theme=${t}` : ''; };
   function navigate(screen, hash = '') {
     if (inFrame) { window.parent.postMessage({ type: 'nw:navigate', screen, hash }, '*'); return; }
     location.href = `${pageFile(screen)}${keepSearch()}${hash ? `#${hash}` : ''}`;
@@ -573,6 +578,7 @@
     const f = formOf(p);
     const nx = nextInfo(p);
     const tags = [p.member ? '<span class="tag tag-member">组织成员</span>' : '<span class="tag tag-out">组织外</span>'];
+    if (me.is(p.login)) tags.unshift('<span class="tag tag-live me-tag">我</span>');
     if (p.dormant) tags.push(`<span class="tag tag-sleep">${icon('moon-z', 11)}冬眠</span>`);
     let formBody;
     if (f.egg) {
@@ -926,6 +932,98 @@
     return { get value() { return cur; }, set, el, refresh: () => place(false) };
   }
 
+  // ───────────────────────── 我：这个浏览器记住的账号 ─────────────────────────
+  // 只在 localStorage 存一个账号名，不是登录，也不验证归属；页面无法知道访客是谁，只能由访客自己选。
+  // 三种状态：unset（没选过）/ set（选了且快照里有这个人）/ missing（选了但当前快照没有：改名、尚未更新）。
+  // 浏览、搜索、分享、点人都不会改变它；只有明确的「记为我的账号」才写入。
+  const me = (() => {
+    const KEY = 'nwverse:contribution:me';
+    let pref = null, person = null;
+    const subs = new Set();
+    function read() {
+      try {
+        const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+        pref = v && v.v === 1 && typeof v.login === 'string' && v.login.trim() ? { login: v.login.trim() } : null;
+      } catch (e) { pref = null; }
+      person = pref ? NW.byLogin.get(pref.login) || NW.people.find((p) => p.login.toLowerCase() === pref.login.toLowerCase()) || null : null;
+    }
+    function emit() { subs.forEach((fn) => { try { fn(api.state()); } catch (e) { console.error(e); } }); }
+    function set(login) {
+      try { localStorage.setItem(KEY, JSON.stringify({ v: 1, login })); } catch (e) { return false; }
+      read();
+      emit();
+      return true;
+    }
+    function clear() {
+      try { localStorage.removeItem(KEY); } catch (e) { /* 清不掉也按未设置展示 */ }
+      pref = null; person = null;
+      emit();
+    }
+    // 其他标签页改了偏好、或从 bfcache 回来时，重新读取
+    addEventListener('storage', (e) => { if (e.key === KEY || e.key === null) { read(); emit(); } });
+    addEventListener('pageshow', (e) => { if (e.persisted) { read(); emit(); } });
+    const api = {
+      KEY,
+      get pref() { return pref; },
+      get person() { return person; },
+      state: () => (!pref ? 'unset' : person ? 'set' : 'missing'),
+      is: (p) => !!person && (typeof p === 'string' ? p === person.login : p === person),
+      set, clear,
+      subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+      // 记住（带撤销）：写入失败时不假装成功
+      remember(login) {
+        const p = NW.byLogin.get(login);
+        if (!p) return false;
+        const prev = pref ? pref.login : null;
+        if (!set(p.login)) { toast('这个浏览器暂时无法记住账号，可先查看档案或复制链接', { icon: 'alert-triangle', ms: 4200 }); return false; }
+        toast(`已在这个浏览器记住 <b>@${esc(p.login)}</b>`, { icon: 'check', ms: 8000, action: { label: '撤销', run: () => { if (prev) set(prev); else clear(); toast('已撤销', { icon: 'rotate-ccw' }); } } });
+        return true;
+      },
+      forget() { clear(); toast('已不再记住这个账号', { icon: 'log-out' }); },
+    };
+    read();
+    return api;
+  })();
+
+  // 顶栏入口：未设置「找到我」；已设置「我 · @账号」+ 菜单（我的档案 / 我的总榜名次 / 更换 / 不再记住）
+  const meEntry = (() => {
+    let host = null, menuOpen = false;
+    const menuApi = { scrim: false, lock: false, isOpen: () => menuOpen, close: () => setMenu(false), key(e) { if (e.key === 'Escape') { setMenu(false); return true; } return false; } };
+    function buttonHTML() {
+      const s = me.state();
+      if (s === 'unset') return `<button type="button" class="btn me-btn" data-action="me-pick" aria-label="找到我：选择我的账号" data-tip="选一次账号，这个浏览器会记住">${icon('user-plus', 15)}<span class="lbl">找到我</span></button>`;
+      if (s === 'missing') return `<button type="button" class="btn me-btn is-miss" data-action="me-menu" aria-haspopup="menu" aria-expanded="false" aria-label="我 · @${esc(me.pref.login)}，当前快照未找到，打开菜单">${icon('alert-triangle', 15)}<span class="lbl">我 · @${esc(me.pref.login)}</span>${icon('chevron-down', 14)}</button>`;
+      const p = me.person;
+      return `<button type="button" class="btn me-btn is-set" data-action="me-menu" aria-haspopup="menu" aria-expanded="false" aria-label="我 · @${esc(p.login)}，打开菜单">${avatar(p.login, 20)}<span class="lbl">我 · @${esc(p.login)}</span>${icon('chevron-down', 14)}</button>`;
+    }
+    function menuHTML() {
+      const s = me.state();
+      if (s === 'unset') return '';
+      const item = (action, ic, label, end = '', cls = '') => `<button type="button" class="mi ${cls}" role="menuitem" data-action="${action}">${icon(ic, 16)}<span>${label}</span>${end ? `<span class="end num">${end}</span>` : ''}</button>`;
+      if (s === 'missing') {
+        return `<div class="me-menu card" role="menu" aria-label="我的账号"><div class="mm-head is-miss">${icon('alert-triangle', 22)}<div><b>当前快照未找到 @${esc(me.pref.login)}</b><small>可能是改名或数据尚未更新；不是零分</small></div></div>`
+          + `${item('me-pick', 'repeat', '重新选择账号')}${item('me-forget', 'log-out', '不再记住', '', 'danger')}</div>`;
+      }
+      const p = me.person;
+      return `<div class="me-menu card" role="menu" aria-label="我的账号"><div class="mm-head">${avatar(p.login, 28)}<div><b>@${esc(p.login)}</b><small>仅此浏览器记住</small></div></div>`
+        + `${item('me-go', 'user', '我的档案')}${item('me-rank', 'trophy', '我的总榜名次', `#${p.rank}`)}<hr>${item('me-pick', 'repeat', '更换账号')}${item('me-forget', 'log-out', '不再记住', '', 'danger')}</div>`;
+    }
+    function render() { if (host) host.innerHTML = buttonHTML() + menuHTML(); }
+    function setMenu(on) {
+      if (!host) return;
+      const m = $('.me-menu', host), b = $('.me-btn', host);
+      if (!m) on = false;
+      menuOpen = on;
+      if (m) m.classList.toggle('on', on);
+      if (b) b.setAttribute('aria-expanded', String(on));
+      if (on) { pushLayer(menuApi); tip.hide(); const f = $('.mi', m); if (f) f.focus({ preventScroll: true }); }
+      else popLayer(menuApi);
+    }
+    document.addEventListener('pointerdown', (e) => { if (menuOpen && host && !host.contains(e.target)) setMenu(false); });
+    me.subscribe(() => { if (menuOpen) popLayer(menuApi); menuOpen = false; render(); });
+    return { mount(el) { host = el; render(); }, toggle: () => setMenu(!menuOpen), close: () => setMenu(false), isOpen: () => menuOpen };
+  })();
+
   // ───────────────────────── 应用顶栏 + 手机底部标签栏 ─────────────────────────
   // 档案（profile.html）不单独占导航：点任意贡献者进入
   const SCREENS = [
@@ -947,9 +1045,11 @@
       <div class="appbar-r">
         <span class="fresh" data-tip="数据快照生成于 ${esc(fmt.datetime(NW.now))}（UTC+8）"><i class="live-dot"></i><span class="fresh-label">数据更新于</span>${fmt.week(NW.now)} ${fmt.hm(NW.now)}</span>
         <button type="button" class="btn search-btn" data-action="cmdk" aria-label="搜索贡献者（${mod}K）">${icon('search', 15)}<span class="lbl">搜索贡献者</span><span class="kbds only-kbd"><kbd>${mod}</kbd><kbd>K</kbd></span></button>
+        <div class="me-wrap" data-me-wrap></div>
         <button type="button" class="btn btn-ghost btn-icon only-kbd hide-sm" data-action="keys" aria-label="键盘快捷键" data-tip="键盘快捷键  ?">${icon('keyboard', 18)}</button>
         ${themeToggleHTML()}
       </div></div>`;
+    meEntry.mount($('[data-me-wrap]', el));
     let tb = $('.tabbar');
     if (!tb) { tb = document.createElement('nav'); tb.className = 'tabbar'; tb.setAttribute('aria-label', '页面导航'); document.body.appendChild(tb); }
     tb.innerHTML = SCREENS.map((s) => `<a href="${href(s.id)}" data-screen="${s.id}"${s.id === active ? ' aria-current="page"' : ''}>${icon(s.icon, 21)}<span>${s.label}</span></a>`).join('');
@@ -962,8 +1062,14 @@
   document.addEventListener('click', (e) => {
     const a = e.target.closest('[data-action]');
     if (!a) return;
-    if (a.dataset.action === 'cmdk') cmdk.open();
-    if (a.dataset.action === 'keys') keys.open();
+    const act = a.dataset.action;
+    if (act === 'cmdk') cmdk.open();
+    else if (act === 'keys') keys.open();
+    else if (act === 'me-pick') { meEntry.close(); mePicker.open(a); }
+    else if (act === 'me-menu') meEntry.toggle();
+    else if (act === 'me-forget') { meEntry.close(); me.forget(); }
+    else if (act === 'me-go') { meEntry.close(); if (me.person) openPerson(me.person.login); }
+    else if (act === 'me-rank') { meEntry.close(); navigate('c2', 'me'); }
   });
 
   // ───────────────────────── 抽屉 ─────────────────────────
@@ -1051,25 +1157,49 @@
         { group: '操作', label: '键盘快捷键', icon: 'keyboard', kbd: '?', run: () => keys.open() },
       ];
     }
+    // 「我的」分组：按本地记住的账号给出命令。「不再记住」永远不是默认选中项
+    function mine() {
+      const s = me.state();
+      if (s === 'unset') return [{ group: '我的', label: '选择我的账号', icon: 'user-plus', run: () => mePicker.open() }];
+      if (s === 'missing') {
+        return [
+          { group: '我的', label: `重新选择我的账号（当前快照未找到 @${me.pref.login}）`, icon: 'alert-triangle', run: () => mePicker.open() },
+          { group: '我的', label: '不再记住我的账号', icon: 'log-out', run: () => me.forget() },
+        ];
+      }
+      const p = me.person;
+      return [
+        { group: '我的', label: `我的档案 · @${p.login}`, icon: 'user', run: () => openPerson(p.login) },
+        { group: '我的', label: '我的总榜名次', icon: 'trophy', end: `#${p.rank}`, run: () => navigate('c2', 'me') },
+        { group: '我的', label: '更换我的账号', icon: 'repeat', run: () => mePicker.open() },
+        { group: '我的', label: '不再记住我的账号', icon: 'log-out', run: () => me.forget() },
+      ];
+    }
     function render() {
       const q = input.value.trim().toLowerCase();
       const ppl = q
         ? NW.people.filter((p) => p.login.toLowerCase().includes(q)).sort((a, b) => (b.login.toLowerCase().startsWith(q) - a.login.toLowerCase().startsWith(q)) || a.rank - b.rank).slice(0, 8)
         : byTw().slice(0, 6);
+      const my = mine().filter((c) => !q || c.label.toLowerCase().includes(q));
       const cmds = [...extra, ...builtins()].filter((c) => !q || c.label.toLowerCase().includes(q)).slice(0, q ? 8 : 12);
-      items = [...ppl.map((p) => ({ type: 'p', p })), ...cmds.map((c) => ({ type: 'c', c }))];
+      items = [...my.map((c) => ({ type: 'c', c })), ...ppl.map((p) => ({ type: 'p', p })), ...cmds.map((c) => ({ type: 'c', c }))];
+      const cmdItem = (c, k) => `<button type="button" class="cmdk-item" role="option" id="nwk-ck-${k}" data-i="${k}">${icon(c.icon || 'arrow-right', 16)}<span>${hl(c.label, q)}</span><span class="end">${c.kbd ? `<kbd>${esc(c.kbd)}</kbd>` : ''}${c.end ? `<span class="num">${esc(c.end)}</span>` : ''}</span></button>`;
       let h = '', k = 0;
+      if (my.length) {
+        h += '<div class="cmdk-group">我的</div>';
+        for (const c of my) h += cmdItem(c, k++);
+      }
       if (ppl.length) {
         h += `<div class="cmdk-group">${q ? '贡献者' : '本周最活跃'}</div>`;
         for (const p of ppl) {
-          h += `<button type="button" class="cmdk-item" role="option" id="nwk-ck-${k}" data-i="${k++}">${avatar(p.login, 22, { dim: p.dormant })}<span>${hl(p.login, q)}</span>${p.member ? '' : '<span class="tag tag-out">组织外</span>'}`
+          h += `<button type="button" class="cmdk-item" role="option" id="nwk-ck-${k}" data-i="${k++}">${avatar(p.login, 22, { dim: p.dormant })}<span>${hl(p.login, q)}</span>${me.is(p.login) ? '<span class="tag tag-live me-tag">我</span>' : ''}${p.member ? '' : '<span class="tag tag-out">组织外</span>'}`
             + `<span class="end">${levelBadge(p, { size: 16 })}<span class="num">#${p.rank}</span><span class="num" style="min-width:44px;text-align:right">${mag(p.bonus)}</span></span></button>`;
         }
       }
       let g = '';
       for (const c of cmds) {
         if (c.group !== g) { g = c.group; h += `<div class="cmdk-group">${esc(g)}</div>`; }
-        h += `<button type="button" class="cmdk-item" role="option" id="nwk-ck-${k}" data-i="${k++}">${icon(c.icon || 'arrow-right', 16)}<span>${hl(c.label, q)}</span><span class="end">${c.kbd ? `<kbd>${esc(c.kbd)}</kbd>` : ''}</span></button>`;
+        h += cmdItem(c, k++);
       }
       if (!items.length) h = `<div class="cmdk-empty">没有找到「${esc(input.value.trim())}」<br><span style="font-size:12px">只有有贡献记录的人会出现在这里</span></div>`;
       list.innerHTML = h;
@@ -1115,6 +1245,138 @@
         if (!silent) restoreFocus(trigger);
       },
       key(e) { if (e.key === 'Escape') { api.close(); return true; } if (e.key === 'Tab') { e.preventDefault(); return false; } return false; },
+    };
+    return api;
+  })();
+
+  // ───────────────────────── 选择我的账号 ─────────────────────────
+  // 搜全部有贡献记录的人（不受榜单筛选影响），完全匹配优先；选中后先进确认区，再按「记为我的账号」才写入。
+  // 「只查看档案」只打开档案，不记住。账号不在快照里时明确说「未找到」，不列成员名单，也不创建零分账号。
+  const mePicker = (() => {
+    let el, input, list, searchEl, confirmEl, sub, items = [], sel = 0, isOpen = false, trigger = null, confirm = null;
+    const norm = (q) => q.trim().replace(/^@/, '').toLowerCase();
+    const match = (q) => {
+      const t = norm(q);
+      if (!t) return [];
+      const lc = (p) => p.login.toLowerCase();
+      return NW.people.filter((p) => lc(p).includes(t))
+        .sort((a, b) => (lc(b) === t) - (lc(a) === t) || (lc(b).startsWith(t) - lc(a).startsWith(t)) || a.rank - b.rank)
+        .slice(0, 8);
+    };
+    const hl = (s, t) => { if (!t) return esc(s); const k = s.toLowerCase().indexOf(t); return k < 0 ? esc(s) : `${esc(s.slice(0, k))}<mark>${esc(s.slice(k, k + t.length))}</mark>${esc(s.slice(k + t.length))}`; };
+    function build() {
+      el = document.createElement('div');
+      el.className = 'cmdk me-picker';
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
+      el.setAttribute('aria-label', '选择我的账号');
+      el.tabIndex = -1;
+      el.innerHTML = `<div class="pk-head"><div><b>选择我的账号</b><p class="pk-sub"></p></div><button type="button" class="btn btn-ghost btn-icon btn-sm" data-pk="close" aria-label="关闭">${icon('x', 16)}</button></div>`
+        + `<div class="pk-search"><div class="cmdk-in">${icon('search', 18)}<input type="text" placeholder="输入 GitHub 账号" aria-label="输入 GitHub 账号" role="combobox" aria-expanded="true" aria-controls="nwk-pk-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"><kbd>esc</kbd></div>`
+        + '<div class="cmdk-list" id="nwk-pk-list" role="listbox" aria-label="匹配的贡献者"></div>'
+        + `<div class="cmdk-ft"><span><kbd>↑</kbd><kbd>↓</kbd>选择</span><span><kbd>↵</kbd>选中</span><span><kbd>esc</kbd>关闭</span><span style="margin-left:auto">选中后还要确认，不会直接保存</span></div></div>`
+        + '<div class="pk-confirm" hidden></div>';
+      document.body.appendChild(el);
+      input = $('input', el);
+      list = $('.cmdk-list', el);
+      searchEl = $('.pk-search', el);
+      confirmEl = $('.pk-confirm', el);
+      sub = $('.pk-sub', el);
+      input.addEventListener('input', () => { sel = 0; render(); });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; mark(); } }
+        else if (e.key === 'Enter') { e.preventDefault(); if (items[sel]) pick(items[sel]); }
+      });
+      list.addEventListener('pointermove', (e) => { const b = e.target.closest('.cmdk-item'); if (b && +b.dataset.i !== sel) { sel = +b.dataset.i; mark(); } });
+      el.addEventListener('click', (e) => {
+        const it = e.target.closest('.cmdk-item');
+        if (it) { pick(items[+it.dataset.i]); return; }
+        const b = e.target.closest('[data-pk]');
+        if (!b) return;
+        const a = b.dataset.pk;
+        if (a === 'close') api.close();
+        else if (a === 'clear') { input.value = ''; sel = 0; render(); input.focus(); }
+        else if (a === 'rules') { api.close(true); navigate('rules'); }
+        else if (a === 'back') back();
+        else if (a === 'save') { const p = confirm; api.close(true); me.remember(p.login); }
+        else if (a === 'view') { const p = confirm; api.close(true); openPerson(p.login); }
+      });
+    }
+    function render() {
+      const raw = input.value.trim(), t = norm(input.value);
+      items = match(input.value);
+      let h;
+      if (!t) h = `<div class="cmdk-empty">输入账号查找。搜索全部 ${NW.people.length} 位有贡献记录的人，不受榜单筛选影响。</div>`;
+      else if (!items.length) h = `<div class="cmdk-empty"><b>当前公开快照未找到「${esc(raw)}」</b><p>请核对账号；新贡献或改名可能尚未更新。看板只收录有贡献记录的人，不会列出成员名单。</p><div class="row"><button type="button" class="btn btn-sm" data-pk="clear">${icon('rotate-ccw', 14)}清空重搜</button><button type="button" class="btn btn-sm btn-ghost" data-pk="rules">查看统计口径</button></div></div>`;
+      else {
+        h = `<div class="cmdk-group">贡献者 · ${items.length}</div>` + items.map((p, k) => `<button type="button" class="cmdk-item" role="option" id="nwk-pk-${k}" data-i="${k}">${avatar(p.login, 22, { dim: p.dormant })}<span class="ellipsis">${hl(p.login, t)}</span>${me.is(p.login) ? '<span class="tag tag-live me-tag">我</span>' : ''}${p.member ? '' : '<span class="tag tag-out">组织外</span>'}`
+          + `<span class="end">${levelBadge(p, { size: 16 })}<span class="num">总榜 #${p.rank}</span><span class="num" style="min-width:44px;text-align:right">${mag(p.bonus)}</span></span></button>`).join('');
+      }
+      list.innerHTML = h;
+      sel = clamp(sel, 0, Math.max(0, items.length - 1));
+      mark();
+    }
+    function mark() {
+      $$('.cmdk-item', list).forEach((b) => b.setAttribute('aria-selected', String(+b.dataset.i === sel)));
+      const a = $(`.cmdk-item[data-i="${sel}"]`, list);
+      if (a) { a.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', a.id); } else input.removeAttribute('aria-activedescendant');
+    }
+    function pick(p) {
+      if (!p) return;
+      confirm = p;
+      const cur = me.pref;
+      const swap = cur && cur.login.toLowerCase() !== p.login.toLowerCase() ? `<div class="pc-swap">${icon('repeat', 12)}将替换当前记住的 @${esc(cur.login)}</div>` : '';
+      confirmEl.innerHTML = `<div class="pc-row">${avatar(p.login, 56, { dim: p.dormant })}<div class="pc-txt"><b>@${esc(p.login)}</b><div class="pc-meta">${levelBadge(p, { size: 16 })}<span>总榜 #${p.rank} · 累计魔力 ${mag(p.bonus)}</span>${p.member ? '' : '<span class="tag tag-out">组织外</span>'}</div>${swap}</div></div>`
+        + `<div class="pc-act"><button type="button" class="btn btn-primary" data-pk="save">${icon('check', 15)}记为我的账号</button><button type="button" class="btn" data-pk="view">只查看档案</button><button type="button" class="btn btn-ghost" data-pk="back">${icon('arrow-left', 14)}换一个</button></div>`
+        + `<p class="footnote">${icon('info', 13)}记忆仅保存在这个浏览器。公用电脑请选「只查看档案」。</p>`;
+      sub.textContent = '确认后，首页和排行榜会直接显示你的魔力与名次。';
+      searchEl.hidden = true;
+      confirmEl.hidden = false;
+      $('[data-pk="save"]', confirmEl).focus();
+    }
+    function back() {
+      confirm = null;
+      confirmEl.hidden = true;
+      searchEl.hidden = false;
+      sub.textContent = '从已有贡献记录中选择。记住后，下次打开即可看到自己的名次。';
+      input.focus();
+    }
+    const api = {
+      scrim: true,
+      lock: false,
+      isOpen: () => isOpen,
+      open(t) {
+        if (isOpen) return;
+        if (!el) build();
+        isOpen = true;
+        trigger = t && t.focus ? t : document.activeElement;
+        personCard.hide();
+        tip.hide();
+        if (cmdk.isOpen()) cmdk.close(true);
+        confirm = null;
+        input.value = '';
+        sel = 0;
+        confirmEl.hidden = true;
+        searchEl.hidden = false;
+        sub.textContent = '从已有贡献记录中选择。记住后，下次打开即可看到自己的名次。';
+        render();
+        pushLayer(api);
+        void el.offsetWidth;
+        el.classList.add('on');
+        setTimeout(() => input.focus(), 10);
+      },
+      close(silent) {
+        if (!isOpen) return;
+        isOpen = false;
+        el.classList.remove('on');
+        popLayer(api);
+        if (!silent) restoreFocus(trigger);
+      },
+      key(e) {
+        if (e.key === 'Escape') { if (confirm) back(); else api.close(); return true; }
+        if (e.key === 'Tab') { trapTab(el, e); return false; }
+        return false;
+      },
     };
     return api;
   })();
@@ -1178,10 +1440,15 @@
   })();
 
   // ───────────────────────── 吐司 / 撒花 / 萤火 ─────────────────────────
-  let toastEl = null, toastT = 0;
-  function toast(html, { ms = 2600, icon: ic = null } = {}) {
-    if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'toast'; toastEl.setAttribute('role', 'status'); toastEl.setAttribute('aria-live', 'polite'); document.body.appendChild(toastEl); }
-    toastEl.innerHTML = `${ic ? icon(ic, 16) : ''}<span>${html}</span>`;
+  let toastEl = null, toastT = 0, toastAction = null;
+  // action = { label, run }：吐司右侧一个按钮（如「撤销」），点了就收起
+  function toast(html, { ms = 2600, icon: ic = null, action = null } = {}) {
+    if (!toastEl) {
+      toastEl = document.createElement('div'); toastEl.className = 'toast'; toastEl.setAttribute('role', 'status'); toastEl.setAttribute('aria-live', 'polite'); document.body.appendChild(toastEl);
+      toastEl.addEventListener('click', (e) => { if (!e.target.closest('.toast-act')) return; clearTimeout(toastT); toastEl.classList.remove('on'); const run = toastAction; toastAction = null; if (run) run(); });
+    }
+    toastAction = action ? action.run : null;
+    toastEl.innerHTML = `${ic ? icon(ic, 16) : ''}<span>${html}</span>${action ? `<button type="button" class="btn btn-sm toast-act">${esc(action.label)}</button>` : ''}`;
     void toastEl.offsetWidth;
     toastEl.classList.add('on');
     clearTimeout(toastT);
@@ -1449,6 +1716,8 @@
     $, $$, esc, clamp, hue, rng, fmt, mag,
     // 协议能力
     theme, annot, tip, personCard, openPerson, setPersonHandler, navigate, SCREENS,
+    // 我：本地记住的账号
+    me, mePicker, meEntry,
     // 渲染助手（返回字符串）
     icon, frog, frogOf, formOf, levelBadge, nextInfo, etaText, hatchHint,
     avatar, who, pname, people, delta, change,
