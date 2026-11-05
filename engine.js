@@ -229,6 +229,7 @@ function computeBoard(data, rules, now) {
       if (owner && !rules.invalidIssueReasons.includes(issue.stateReason)) {
         const p = get(owner);
         p.threads.set(key, toTime(issue.createdAt));
+        p.activityTimes.push(toTime(issue.createdAt));
         p.issuesFiled++;
       }
       for (const c of issue.comments.nodes) touch(c.author, toTime(c.createdAt), key, owner);
@@ -307,7 +308,7 @@ function computeBoard(data, rules, now) {
     let passAt = null;
     const windowWeeks = new Set();
     let windowMerged = 0;
-    const events = [...mergedTimes.map((t) => [t, true]), ...threadTimes.map((t) => [t, false])].sort((x, y) => x[0] - y[0]);
+    const events = [...mergedTimes.map((t) => [t, true]), ...p.activityTimes.map((t) => [t, false])].sort((x, y) => x[0] - y[0]);
     for (const [t, isMerge] of events) {
       if (t > evalAt) break;
       windowWeeks.add(weekStart(t, tz));
@@ -376,7 +377,7 @@ function computeBoard(data, rules, now) {
       bonusModel: score.model,
       bonusCollab: score.collab,
       weekly: score.weekly,
-      activeWeeks: score.weekly.size,
+      activeWeeks: new Set([...mergedTimes, ...p.activityTimes].map((t) => weekStart(t, tz))).size,
       lines: mergedPrs.reduce((n, x) => n + x.lines, 0),
       commits: mergedPrs.reduce((n, x) => n + x.commits, 0),
       modelMix,

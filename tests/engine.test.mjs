@@ -44,6 +44,8 @@ for (const scenario of [
     assert.equal(person.bonus, RULES.score.collab);
     assert.equal(person.weekly.size, 1);
     assert.equal(person.weekly.has(currentWeek.start), false);
+    assert.equal(person.activeWeeks, 2);
+    assert.equal(person.newbie.activeWeeks, 1); // The repeat is outside the assessment window.
   });
 }
 
@@ -60,4 +62,30 @@ test('self, bot, ignored and undated collaboration do not update activity', () =
   assert.equal(board.people.find((p) => p.login === author.login).lastAt, Date.parse(FIRST));
   assert.equal(board.weeks.at(-1).active, 0);
   assert.equal(board.people.length, 2);
+});
+
+test('a repeat in a second week completes the activity requirement without extra credit', () => {
+  const second = '2026-08-08T12:00:00Z';
+  const own = Array.from({ length: RULES.newbie.merged }, (_, i) => ({
+    ...pr({ mergedAt: FIRST }), number: i + 2, author: collaborator,
+  }));
+  const before = computeBoard(data({ prs: [...own, pr({ reviews: [review(FIRST)] })] }), RULES, NOW);
+  const after = computeBoard(data({ prs: [...own, pr({ reviews: [review(FIRST), review(second)] })] }), RULES, NOW);
+  const person = after.people.find((p) => p.login === collaborator.login);
+  const previous = before.people.find((p) => p.login === collaborator.login);
+  assert.equal(previous.newbie.status, 'failed');
+  assert.equal(person.newbie.status, 'passed');
+  assert.equal(person.newbie.passAt, Date.parse(second));
+  assert.equal(person.newbie.activeWeeks, 2);
+  assert.equal(person.activeWeeks, 2);
+  assert.equal(person.collab, 1);
+  assert.equal(person.bonus, previous.bonus);
+  assert.deepEqual(person.weekly, previous.weekly);
+});
+
+test('filing an issue still counts toward personal and assessment activity weeks', () => {
+  const board = computeBoard(data({ issues: [issue([])] }), RULES, NOW);
+  const person = board.people.find((p) => p.login === author.login);
+  assert.equal(person.activeWeeks, 1);
+  assert.equal(person.newbie.activeWeeks, 1);
 });
