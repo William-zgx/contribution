@@ -385,6 +385,10 @@
   let fxDrawn = false;
   function drawFunnel() {
     const host = $('#funnel');
+    if (!TOTAL) {
+      host.innerHTML = K.empty({ art: 'egg', title: '暂无贡献记录', body: '有贡献者后，这里会显示孵化进度。' });
+      return;
+    }
     const Wd = host.clientWidth;
     if (!Wd) return;
     if (Wd < 600) { drawFunnelMobile(host); return; }
@@ -682,7 +686,7 @@
   ];
   const coLegend = () => { $('#coLegend').innerHTML = SER.map((s) => `<span class="key" style="--k:${s.color}">${s.label}</span>`).join('') + (coMode === 'pct' ? '<span class="co-note">柱顶数字是这一批的人数</span>' : ''); };
   // 默认选中：还有人在考核的批次里人数最多的一批（三种状态最可能同时出现）
-  let coMode = 'n', coSel = (eggCos.slice().sort((a, b) => b.list.length - a.list.length || b.i - a.i)[0] || CO[NW.last]).i, coHov = -1, coG = null;
+  let coMode = 'n', coSel = (eggCos.slice().sort((a, b) => b.list.length - a.list.length || b.i - a.i)[0] || CO[NW.last])?.i ?? -1, coHov = -1, coG = null;
   K.segmented($('#coSeg'), [{ value: 'n', label: '人数' }, { value: 'pct', label: '占比' }], (v) => { coMode = v; coLegend(); drawCohort(); }, { size: 'sm', value: 'n' });
   coLegend();
   const coTip = (c) => {
@@ -694,6 +698,10 @@
   };
   function drawCohort() {
     const host = $('#cohort');
+    if (!CO.length) {
+      host.innerHTML = K.empty({ art: 'egg', title: '暂无贡献记录', body: '有新人首次贡献后，这里会显示批次孵化情况。' });
+      return;
+    }
     const Wd = host.clientWidth; if (!Wd) return;
     const Hh = host.clientHeight;
     const padL = coMode === 'pct' ? 38 : 28, padR = 6, padT = 34, padB = 22;
@@ -788,6 +796,7 @@
   function renderCoPanel(anim) {
     const c = CO[coSel];
     const el = $('#coPanel');
+    if (!c) { el.hidden = true; return; }
     const sortP = (a, b) => b.bonus - a.bonus;
     const grp = (s) => {
       const L = c[s.k].slice().sort(sortP);
@@ -801,6 +810,7 @@
   }
   (function wireCohort() {
     const host = $('#cohort');
+    if (!CO.length) { drawCohort(); return; }
     host.classList.add('chart');
     host.tabIndex = 0;
     host.setAttribute('role', 'img');
