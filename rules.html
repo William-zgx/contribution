@@ -805,6 +805,7 @@
     '数据是上传脚本生成的快照，页面不实时拉取；更新频率取决于上传任务的执行间隔。',
     '只展示人维度的贡献度，不展示任何仓库维度的信息；看板仓库本身的 PR 与 issue 不计入。',
     `模型来自 commit 的 Co-Authored-By 标记，是提交者自行声明的文本，可以伪造，也可以删掉；只看每个 PR 最后 ${LIM.commits} 个 commit。删掉了标记的 PR 按「无 AI 标注」计，所以 AI 占比是下限。`,
+    'Claude、Gemini、TRAE 和型号名（Opus、Sonnet 等）也会出现在人名里，所以这几档只认完整的 AI 署名，例如「Claude」「Claude Code」「Claude Opus 5.5」「Gemini 2.5 Flash」「TRAE CLI」；「Claude Dupont」「Gemini Wen」这类人名按「无 AI 标注」计。括号里的署名单独识别，如「某人 (Claude Opus 5.5)」。',
     'Codex CLI 默认署名「Codex」、Cursor 默认署名「Cursor」，都不含型号，分别按「GPT 其他」和 ×1 计。需要按型号计分时，在工具里把署名配置成带型号的名字（如 Codex 的 commit_attribution）。TRAE CLI 默认署名「TRAE CLI」，按扣分计。',
     '模型系数按组织偏好整体定档：Claude 强于 GPT；DeepSeek 胜在速度、Gemini 胜在成本，系数低于前两家。不区分版本，也不对应具体的基准测试分数；出现新的型号名或代号时需要更新识别规则。',
     '没有 AI 署名的 PR 绝大多数也由 agent 编写，署名与否主要取决于工具配置，所以各档系数与「无 AI 标注」的 ×1 只拉开小幅差距，PR 分主要由改动行和 commit 数决定。',

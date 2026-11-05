@@ -78,6 +78,33 @@ test('positive and negative model adjustments stay in the PR curve and reconcile
   close(mixed.bonus, 30 * (1.9 * (opus + trae)) / (30 + 1.9 * (opus + trae)));
 });
 
+// 每个署名单独成一个合入 PR，返回识别出的模型档位
+function modelKeyOf(name) {
+  const board = computeBoard({ org: 'example', members: [], repos: [{ name: 'project', prs: [scorePr(1, TIME, name)], issues: [] }] }, RULES, Date.parse(TIME));
+  const label = board.summary.models[0].label;
+  return { key: [...RULES.models, RULES.modelNone].find((m) => m.label === label).key, ai: board.summary.mergedAi };
+}
+
+test('AI signatures from Claude Code, Codex, Cursor and TRAE are recognized', () => {
+  const cases = [
+    ['Claude', 'claude'], ['Claude Code', 'claude'], ['claude[bot]', 'claude'],
+    ['Claude Opus 5.5', 'opus'], ['Claude Opus 5.5 (1M context)', 'opus'], ['Claude Opus', 'opus'], ['claude-opus-4-7', 'opus'],
+    ['天童ケイ (Claude Opus 5.5)', 'opus'],
+    ['Claude Fable 5.1', 'fable'], ['Claude Sonnet 5.5', 'sonnet'], ['Claude Haiku 5.5', 'haiku'],
+    ['Codex', 'gpt'], ['GPT-6 (Codex)', 'gpt'], ['Codex (GPT-6-Astra)', 'gptTop'], ['GPT-6.1 Sol', 'gptSol'],
+    ['Gemini', 'gemini'], ['Gemini 2.5 Flash', 'gemini'], ['Gemini CLI', 'gemini'], ['Gemini 3 Pro', 'geminiPro'],
+    ['DeepSeek R1', 'deepseekPro'], ['Cursor', 'cursor'], ['Cursor Agent', 'cursor'], ['TRAE CLI', 'trae'], ['TRAE', 'trae'],
+  ];
+  for (const [name, key] of cases) assert.deepEqual(modelKeyOf(name), { key, ai: 1 }, name);
+});
+
+test('human names containing model words are not counted as AI', () => {
+  for (const name of ['Claude Dupont', 'Jean-Claude Van', 'Claude Sonnet Smith', 'Sonnet Smith', 'Opus Dei', 'Haiku Tanaka',
+    'Fable Lee', 'Gemini Wen', 'Trae Young', 'Cursor Smith']) {
+    assert.deepEqual(modelKeyOf(name), { key: 'none', ai: 0 }, name);
+  }
+});
+
 test('weeks reset at Monday 00:00 UTC+8 and future actions do not contribute', () => {
   const sunday = '2026-11-08T15:59:59Z';
   const monday = '2026-11-08T16:00:00Z';

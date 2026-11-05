@@ -16,25 +16,28 @@ const RULES = {
     collab: 1,
   },
   // 按 commit 作者与共同作者（Co-Authored-By）的名字识别模型，PR 分乘以 weight。
+  // 名字去掉括号部分后整体比对，括号里的内容单独比对，例如「Claude Opus 5.5 (1M context)」「某人 (Claude Opus 5.5)」。
+  // Claude、Gemini、TRAE 和型号词也会出现在人名里，这几档只认完整的 AI 署名：Claude 型号要带「Claude」前缀或版本号，
+  // 「Claude Dupont」「Gemini Wen」这类人名不算。
   // 系数按组织偏好整体定档，不区分版本：Claude 强于 GPT；DeepSeek 胜在速度、Gemini 胜在成本，系数低于前两家。
   // 没有署名的 PR 绝大多数也由 agent 编写，署名与否主要取决于工具配置，所以各档与「无 AI 标注」只拉开小幅差距。
   // 同一个署名按列表顺序取第一个匹配，所以扣分工具与更具体的代号排在前面。
   // 一个 PR 出现多个模型时取系数最高的；出现系数低于 1 的扣分工具时按扣分计。
   models: [
-    { key: 'trae', family: '其他', short: 'TRAE CLI', label: 'TRAE CLI', weight: 0.94, pattern: /\btrae\b/i },
-    { key: 'opus', family: 'Claude', short: 'Opus', label: 'Claude Opus', weight: 1.18, pattern: /\bopus\b/i },
-    { key: 'fable', family: 'Claude', short: 'Fable', label: 'Claude Fable', weight: 1.15, pattern: /\bfable\b/i },
-    { key: 'sonnet', family: 'Claude', short: 'Sonnet', label: 'Claude Sonnet', weight: 1.12, pattern: /\bsonnet\b/i },
-    { key: 'haiku', family: 'Claude', short: 'Haiku', label: 'Claude Haiku', weight: 1.06, pattern: /\bhaiku\b/i },
-    { key: 'claude', family: 'Claude', short: '未注明型号', label: 'Claude 未注明型号', weight: 1.06, pattern: /\bclaude\b/i },
+    { key: 'trae', family: '其他', short: 'TRAE CLI', label: 'TRAE CLI', weight: 0.94, pattern: /^trae([\s-]+(cli|agent|ide))?$/i },
+    { key: 'opus', family: 'Claude', short: 'Opus', label: 'Claude Opus', weight: 1.18, pattern: /^(claude[\s-]+opus|(claude[\s-]+)?opus[\s-]+v?\d[\w.-]*([\s-]+[\w.-]+)*)$/i },
+    { key: 'fable', family: 'Claude', short: 'Fable', label: 'Claude Fable', weight: 1.15, pattern: /^(claude[\s-]+fable|(claude[\s-]+)?fable[\s-]+v?\d[\w.-]*([\s-]+[\w.-]+)*)$/i },
+    { key: 'sonnet', family: 'Claude', short: 'Sonnet', label: 'Claude Sonnet', weight: 1.12, pattern: /^(claude[\s-]+sonnet|(claude[\s-]+)?sonnet[\s-]+v?\d[\w.-]*([\s-]+[\w.-]+)*)$/i },
+    { key: 'haiku', family: 'Claude', short: 'Haiku', label: 'Claude Haiku', weight: 1.06, pattern: /^(claude[\s-]+haiku|(claude[\s-]+)?haiku[\s-]+v?\d[\w.-]*([\s-]+[\w.-]+)*)$/i },
+    { key: 'claude', family: 'Claude', short: '未注明型号', label: 'Claude 未注明型号', weight: 1.06, pattern: /^claude([\s-]+code|\[bot\])?$/i },
     { key: 'gptTop', family: 'GPT', short: 'Astra、Pro', label: 'GPT Astra / Pro', weight: 1.12, pattern: /\bgpt\b[\w. -]*?\b(astra|pro)\b/i },
     { key: 'gptSol', family: 'GPT', short: 'Sol', label: 'GPT Sol', weight: 1.09, pattern: /\bgpt\b[\w. -]*?\bsol\b/i },
     { key: 'gpt', family: 'GPT', short: 'Terra、Luna、mini 等，Codex 默认署名', label: 'GPT 其他', weight: 1.03, pattern: /\b(gpt|codex|openai|chatgpt)\b/i },
-    { key: 'geminiPro', family: 'Gemini', short: 'Carbon、Argon、Pro', label: 'Gemini Carbon / Argon', weight: 1.06, pattern: /\bgemini\b[\w. -]*?\b(carbon|argon|ultra|pro)\b/i },
-    { key: 'gemini', family: 'Gemini', short: 'Flash 等', label: 'Gemini 其他', weight: 1.03, pattern: /\bgemini\b/i },
+    { key: 'geminiPro', family: 'Gemini', short: 'Carbon、Argon、Pro', label: 'Gemini Carbon / Argon', weight: 1.06, pattern: /^gemini\b[\w. -]*?\b(carbon|argon|ultra|pro)\b/i },
+    { key: 'gemini', family: 'Gemini', short: 'Flash 等', label: 'Gemini 其他', weight: 1.03, pattern: /^gemini([\s-]+(cli|code|assist|flash|lite|nano|v?\d[\w.-]*))*$/i },
     { key: 'deepseekPro', family: 'DeepSeek', short: 'Pro、Reasoner', label: 'DeepSeek Pro', weight: 1.06, pattern: /\bdeepseek\b[\w. -]*?\b(pro|reasoner|r\d)\b/i },
     { key: 'deepseek', family: 'DeepSeek', short: 'Flash 等', label: 'DeepSeek 其他', weight: 1.03, pattern: /\bdeepseek\b/i },
-    { key: 'cursor', family: '其他', short: 'Cursor', label: 'Cursor', weight: 1, pattern: /\bcursor\b/i },
+    { key: 'cursor', family: '其他', short: 'Cursor', label: 'Cursor', weight: 1, pattern: /^cursor([\s-]+agent)?$/i },
     { key: 'copilot', family: '其他', short: 'Copilot', label: 'Copilot', weight: 1, pattern: /\bcopilot\b/i },
   ],
   modelNone: { key: 'none', family: '其他', short: '无 AI 标注', label: '无 AI 标注', weight: 1 },
@@ -161,8 +164,11 @@ function weeklyScore(pr, model, collab, rules = RULES) {
   return result;
 }
 
-function modelOf(text, rules) {
-  return rules.models.find((x) => x.pattern.test(text)) || rules.modelNone;
+// 署名拆成去掉括号后的名字与各个括号里的内容，分别比对
+function modelOf(name, rules) {
+  const parts = [name.replace(/\([^()]*\)/g, ' '), ...Array.from(name.matchAll(/\(([^()]*)\)/g), (m) => m[1])]
+    .map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return rules.models.find((x) => parts.some((s) => x.pattern.test(s))) || rules.modelNone;
 }
 
 // PR 内所有 commit 作者与共同作者的模型：有扣分工具（系数低于 1）时按它计，否则取系数最高的，系数相同取先出现的
@@ -170,7 +176,7 @@ function detectModel(pr, rules) {
   let best = null;
   for (const c of pr.commits?.nodes || []) {
     for (const a of c.commit?.authors?.nodes || []) {
-      const m = modelOf(`${a.name || ''} ${a.email || ''}`, rules);
+      const m = modelOf(a.name || '', rules);
       if (m === rules.modelNone) continue;
       if (m.weight < 1) return m;
       if (!best || m.weight > best.weight) best = m;
