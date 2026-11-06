@@ -4,7 +4,8 @@
   "type": "module",
   "description": "奶蛙宇宙贡献度看板。上传脚本无第三方依赖；这里只声明端到端测试的开发依赖。",
   "scripts": {
-    "test": "node --test tests/engine.test.mjs",
+    "test": "npm run test:engine && npm run test:upload",
+    "test:upload": "node --test tests/upload.test.mjs",
     "serve": "node scripts/serve.mjs",
     "test:engine": "node --test tests/engine.test.mjs tests/style-weight.test.mjs",
     "test:e2e": "playwright test"

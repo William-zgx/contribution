@@ -223,13 +223,29 @@ async function fetchAll(token, org) {
   } finally {
     clearInterval(timer);
   }
-  // 转移进来的 issue 可能编号更大但创建时间更早：数量不够时继续向后探测，直到整批为空
+  // 转入的旧 issue 可能有更大的编号，且与已有编号之间有整批空档；不能把空批次当成结尾。
+  // 只有数量不足的仓库才遍历 issue 连接，按编号去重；通常仍只需原来的低成本批量查询。
   for (const repo of loaded) {
-    let from = Math.ceil(repo.maxNumber / BATCH_SIZE) * BATCH_SIZE + 1;
-    while (repo.prs.length < repo.prTotal || repo.issues.length < repo.issueTotal) {
-      if (!(await fetchBatch(repo, from)())) break;
-      from += BATCH_SIZE;
-    }
+    if (repo.issues.length >= repo.issueTotal) continue;
+    const seen = new Set(repo.issues.map((issue) => issue.number));
+    let cursor = null;
+    do {
+      const { repository } = await gql(token, `query($org: String!, $repo: String!, $cursor: String) {
+        repository(owner: $org, name: $repo) {
+          issues(first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes { __typename ${ISSUE_FIELDS} }
+          }
+        }
+      }`, { org, repo: repo.name, cursor });
+      for (const issue of repository.issues.nodes) {
+        if (seen.has(issue.number)) continue;
+        repo.issues.push(issue);
+        seen.add(issue.number);
+      }
+      const page = repository.issues.pageInfo;
+      cursor = page.hasNextPage ? page.endCursor : null;
+    } while (cursor !== null);
   }
   await fetchClosers(token, loaded.flatMap((r) => r.prs.filter((p) => p.state === 'CLOSED')));
   await fetchFiles(token, loaded.flatMap((r) => r.prs.filter((p) => p.mergedAt)));
